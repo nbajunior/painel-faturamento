@@ -52,7 +52,6 @@ function lerCSV(file, onProgress) {
         header: true,
         delimiter: ';',
         skipEmptyLines: true,
-        worker: true,
         transformHeader: (h) => h.trim(),
         chunk: (results) => {
           linhas.push(...results.data);
