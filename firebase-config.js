@@ -10,10 +10,10 @@
  */
 
 export const firebaseConfig = {
-  apiKey: 'COLE_AQUI',
-  authDomain: 'COLE_AQUI.firebaseapp.com',
-  projectId: 'COLE_AQUI',
-  storageBucket: 'COLE_AQUI.appspot.com',
-  messagingSenderId: 'COLE_AQUI',
-  appId: 'COLE_AQUI',
+  apiKey: "AIzaSyAOSyTarmMFeF-NRoAEj_jPUo_s_1Y7f0U",
+  authDomain: "painel-faturamento-abd9b.firebaseapp.com",
+  projectId: "painel-faturamento-abd9b",
+  storageBucket: "painel-faturamento-abd9b.firebasestorage.app",
+  messagingSenderId: "1031753281095",
+  appId: "1:1031753281095:web:69d12ee43dfc1df09d0b62",
 };
