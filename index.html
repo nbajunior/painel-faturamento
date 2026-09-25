@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Painel de Faturamento</title>
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <!-- ===================== TELA DE LOGIN ===================== -->
+  <section id="tela-login" class="tela-login">
+    <div class="cartao-login">
+      <h1>Painel de Faturamento</h1>
+      <p class="subtitulo">Acesso restrito. Use o e-mail cadastrado pela equipe.</p>
+      <form id="form-login">
+        <label for="input-email">E-mail</label>
+        <input type="email" id="input-email" required autocomplete="username" />
+
+        <label for="input-senha">Senha</label>
+        <input type="password" id="input-senha" required autocomplete="current-password" />
+
+        <button type="submit" id="btn-entrar">Entrar</button>
+        <button type="button" id="btn-esqueci" class="link-botao">Esqueci minha senha</button>
+      </form>
+      <p id="login-erro" class="mensagem-erro" hidden></p>
+    </div>
+  </section>
+
+  <!-- ===================== APP PRINCIPAL ===================== -->
+  <div id="tela-app" class="tela-app" hidden>
+
+    <header class="topo">
+      <h1>Painel de Faturamento</h1>
+      <div class="topo-usuario">
+        <span id="usuario-email"></span>
+        <button id="btn-sair" class="botao-secundario">Sair</button>
+      </div>
+    </header>
+
+    <main class="conteudo">
+
+      <section class="bloco" id="bloco-status">
+        <div class="status-linha">
+          <div>
+            <strong>Referência exibida:</strong> <span id="status-referencia">—</span>
+          </div>
+          <div>
+            <strong>Atualizado por:</strong> <span id="status-atualizado-por">—</span>
+          </div>
+          <div>
+            <strong>Em:</strong> <span id="status-atualizado-em">—</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="bloco">
+        <h2>Resumo</h2>
+        <div class="grid-cards" id="grid-resumo">
+          <div class="card">
+            <span class="card-label">Faturamento Água</span>
+            <span class="card-valor" id="card-agua">R$ 0,00</span>
+          </div>
+          <div class="card">
+            <span class="card-label">Faturamento Esgoto</span>
+            <span class="card-valor" id="card-esgoto">R$ 0,00</span>
+          </div>
+          <div class="card">
+            <span class="card-label">Faturamento Total</span>
+            <span class="card-valor" id="card-fat-total">R$ 0,00</span>
+          </div>
+          <div class="card card-negativo">
+            <span class="card-label">Cancelamento</span>
+            <span class="card-valor" id="card-cancelamento">R$ 0,00</span>
+          </div>
+          <div class="card">
+            <span class="card-label">Indiretas (total)</span>
+            <span class="card-valor" id="card-indiretas">R$ 0,00</span>
+          </div>
+          <div class="card card-destaque">
+            <span class="card-label">Receita Total</span>
+            <span class="card-valor" id="card-receita-total">R$ 0,00</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="bloco">
+        <h2>Indiretas por categoria</h2>
+        <table class="tabela" id="tabela-indiretas">
+          <thead>
+            <tr><th>Categoria</th><th>Valor</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p id="aviso-nao-mapeadas" class="mensagem-aviso" hidden></p>
+      </section>
+
+      <section class="bloco">
+        <h2>Detalhe por ciclo</h2>
+        <table class="tabela" id="tabela-ciclos">
+          <thead>
+            <tr><th>Ciclo (Grupo)</th><th>Localidade</th><th>Água</th><th>Esgoto</th><th>Cancelamento</th><th>Total</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <section class="bloco bloco-upload">
+        <h2>Atualizar dados</h2>
+        <p class="texto-explicativo">
+          Suba os arquivos do ciclo atual. Os cálculos são feitos aqui no navegador
+          e, ao publicar, ficam visíveis para todos que acessarem este painel.
+        </p>
+
+        <label for="input-referencia">Referência (ex: 09-2026)</label>
+        <input type="text" id="input-referencia" placeholder="09-2026" />
+
+        <label for="input-fatura">Fatura de Ciclo (.csv)</label>
+        <input type="file" id="input-fatura" accept=".csv" />
+
+        <label for="input-servico">Serviço Avulso (.csv)</label>
+        <input type="file" id="input-servico" accept=".csv" />
+
+        <button id="btn-processar" class="botao-primario">Processar</button>
+        <div id="progresso" class="progresso" hidden></div>
+        <p id="processar-status" class="mensagem-status"></p>
+
+        <div id="preview-publicar" hidden>
+          <p>Confira o resumo calculado acima antes de publicar.</p>
+          <button id="btn-publicar" class="botao-primario">Publicar para todos</button>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="js/categorization.js"></script>
+  <script src="js/parsers.js"></script>
+  <script src="js/calculations.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

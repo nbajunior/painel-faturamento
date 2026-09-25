@@ -1,0 +1,17 @@
+rules_version = '2';
+
+// Regras de segurança do Firestore.
+// Cole este conteúdo em: Console do Firebase > Firestore Database > Regras.
+//
+// Lógica: só quem está autenticado (ou seja, só quem você cadastrou
+// manualmente em Authentication > Users) consegue ler ou gravar os dados.
+// Ninguém de fora, mesmo sabendo a URL do painel, consegue ver nada.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /ciclos/{referencia} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+  }
+}
