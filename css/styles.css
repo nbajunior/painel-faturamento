@@ -209,3 +209,4 @@ h2 { font-size: 1.05rem; color: var(--azul-profundo); }
 }
 
 #preview-publicar { margin-top: 1rem; }
+[hidden] { display: none !important; }
