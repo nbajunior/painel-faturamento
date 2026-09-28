@@ -1,15 +1,8 @@
 /**
  * parsers.js
- * -----------------------------------------------------------------------
- * Leitura dos 3 arquivos CSV exportados diariamente (Fatura de Ciclo,
- * Consumo, Serviço Avulso). Usa PapaParse (via CDN) para não travar o
- * navegador com arquivos de 100-250 mil linhas.
- *
- * Particularidades tratadas:
- *  - BOM UTF-8 no início do arquivo
- *  - separador ";"
- *  - Consumo e Serviço Avulso trazem uma 1ª linha "sep=;" antes do cabeçalho real
- *  - números em formato BR: "1.234,56" (ponto = milhar, vírgula = decimal)
+ * Leitura dos CSVs exportados diariamente (Fatura de Ciclo, Consumo, Serviço Avulso).
+ * - BOM UTF-8, separador ";", linha "sep=;" opcional antes do cabeçalho
+ * - números em formato BR: "1.234,56"
  */
 
 (function () {
@@ -24,21 +17,13 @@ function parseNumeroBR(valor) {
   return Number.isNaN(n) ? 0 : n;
 }
 
-/**
- * Lê um File (do <input type="file">) como texto, detectando e removendo
- * a linha "sep=;" quando presente, e retorna as linhas já parseadas pelo PapaParse.
- * @param {File} file
- * @param {(rowCount:number)=>void} onProgress callback opcional, chamado periodicamente com a contagem de linhas já lidas
- * @returns {Promise<Array<Object>>} array de objetos {coluna: valor}
- */
+/** Lê um File como texto, remove a linha "sep=;" se existir e devolve as linhas parseadas. */
 function lerCSV(file, onProgress) {
   return new Promise((resolve, reject) => {
-    // Primeiro lemos o arquivo inteiro como texto pra poder checar/remover a 1ª linha "sep=;"
     const reader = new FileReader();
     reader.onerror = () => reject(new Error(`Falha ao ler o arquivo ${file.name}`));
     reader.onload = () => {
       let text = reader.result;
-      // remove BOM se sobrou
       if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
 
       const primeiraQuebra = text.indexOf('\n');
@@ -54,7 +39,8 @@ function lerCSV(file, onProgress) {
         skipEmptyLines: true,
         transformHeader: (h) => h.trim(),
         chunk: (results) => {
-          linhas.push(...results.data);
+          // for em vez de push(...array): o spread estoura a pilha com arquivos grandes
+          for (let i = 0; i < results.data.length; i++) linhas.push(results.data[i]);
           if (onProgress) onProgress(linhas.length);
         },
         complete: () => resolve(linhas),
