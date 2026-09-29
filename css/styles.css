@@ -209,4 +209,24 @@ h2 { font-size: 1.05rem; color: var(--azul-profundo); }
 }
 
 #preview-publicar { margin-top: 1rem; }
+
+/* garante que o atributo hidden sempre esconde o elemento */
 [hidden] { display: none !important; }
+
+/* Revisão de Em Análise */
+.chip-ciclo {
+  display: inline-block;
+  background: var(--fundo);
+  border: 1px solid var(--borda);
+  border-radius: 20px;
+  padding: 0.3rem 0.8rem;
+  margin: 0.2rem 0.4rem 0.2rem 0;
+  font-size: 0.82rem;
+}
+.chip-alerta {
+  background: #fdece7;
+  border-color: #f0a98f;
+  color: var(--vermelho);
+  font-weight: 600;
+}
+#tabela-em-analise th:first-child, #tabela-em-analise td:first-child { width: 2rem; text-align: center; }

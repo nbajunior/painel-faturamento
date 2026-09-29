@@ -42,6 +42,7 @@ const RUBRICAS_CANCELAMENTO = [
   'CREDITO/DEBITO DE ARRECADACAO - VAN',
   'DESCONTO JUDICIAL PROVISORIO',
   'DESCONTO',
+  'CREDITO AJUSTE CONTA',
 ].map(normalizeKey);
 
 // ---------------------------------------------------------------------

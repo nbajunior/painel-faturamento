@@ -9,7 +9,9 @@ import { auth, fazerLogin, fazerLogout, recuperarSenha, observarLogin } from './
 import { salvarResumo, buscarUltimoResumo } from './storage.js';
 
 const { lerCSV } = window.Parsers;
-const { calcularResumo } = window.Calculations;
+const { calcularResumo, montarCandidatosEmAnalise, totalEmAnaliseporCiclo, aplicarOverridesFatura } = window.Calculations;
+
+const LIMITE_EM_ANALISE = 100000;
 
 // ---------------------------------------------------------------------
 // Elementos
@@ -26,11 +28,18 @@ const btnSair = document.getElementById('btn-sair');
 
 const btnProcessar = document.getElementById('btn-processar');
 const btnPublicar = document.getElementById('btn-publicar');
+const btnAplicarAjustes = document.getElementById('btn-aplicar-ajustes');
 const previewPublicar = document.getElementById('preview-publicar');
 const processarStatus = document.getElementById('processar-status');
 const progresso = document.getElementById('progresso');
+const blocoEmAnalise = document.getElementById('bloco-em-analise');
 
 let resumoCalculadoPendente = null; // guarda o último resumo calculado, aguardando publicação
+let referenciaAtual = null;
+let linhasFaturaAtual = null; // guarda os dados já lidos, pra poder recalcular ao aplicar ajustes
+let linhasServicoAtual = null;
+let linhasConsumoAtual = null;
+let overridesAtuais = {}; // { [N. da Ligacao]: novoValor } — ajustes de "Em Análise" já aplicados
 
 // ---------------------------------------------------------------------
 // Autenticação
@@ -166,21 +175,24 @@ btnProcessar.addEventListener('click', async () => {
   const referencia = document.getElementById('input-referencia').value.trim();
   const arquivoFatura = document.getElementById('input-fatura').files[0];
   const arquivoServico = document.getElementById('input-servico').files[0];
+  const arquivoConsumo = document.getElementById('input-consumo').files[0];
 
   if (!referencia) {
     processarStatus.textContent = 'Preencha a referência (ex: 09-2026).';
     return;
   }
-  if (!arquivoFatura || !arquivoServico) {
-    processarStatus.textContent = 'Selecione os dois arquivos (Fatura de Ciclo e Serviço Avulso).';
+  if (!arquivoFatura || !arquivoServico || !arquivoConsumo) {
+    processarStatus.textContent = 'Selecione os três arquivos (Fatura de Ciclo, Serviço Avulso e Consumo).';
     return;
   }
 
   btnProcessar.disabled = true;
   previewPublicar.hidden = true;
+  blocoEmAnalise.hidden = true;
   progresso.hidden = false;
   progresso.textContent = 'Lendo Fatura de Ciclo...';
   processarStatus.textContent = '';
+  overridesAtuais = {};
 
   try {
     const linhasFatura = await lerCSV(arquivoFatura, (n) => {
@@ -190,12 +202,23 @@ btnProcessar.addEventListener('click', async () => {
     const linhasServico = await lerCSV(arquivoServico, (n) => {
       progresso.textContent = `Lendo Serviço Avulso... ${n.toLocaleString('pt-BR')} linhas`;
     });
+    progresso.textContent = 'Lendo Consumo...';
+    const linhasConsumo = await lerCSV(arquivoConsumo, (n) => {
+      progresso.textContent = `Lendo Consumo... ${n.toLocaleString('pt-BR')} linhas`;
+    });
 
     progresso.textContent = 'Calculando...';
-    const resumo = calcularResumo(linhasFatura, linhasServico, referencia);
+    referenciaAtual = referencia;
+    linhasFaturaAtual = linhasFatura;
+    linhasServicoAtual = linhasServico;
+    linhasConsumoAtual = linhasConsumo;
 
+    const resumo = calcularResumo(linhasFatura, linhasServico, referencia);
     renderResumo(resumo);
     resumoCalculadoPendente = resumo;
+
+    renderEmAnalise();
+
     previewPublicar.hidden = false;
     processarStatus.textContent = 'Cálculo concluído. Confira os números acima antes de publicar.';
   } catch (err) {
@@ -205,6 +228,82 @@ btnProcessar.addEventListener('click', async () => {
     progresso.hidden = true;
     btnProcessar.disabled = false;
   }
+});
+
+// ---------------------------------------------------------------------
+// Revisão de "Em Análise"
+// ---------------------------------------------------------------------
+function renderEmAnalise() {
+  // usa a fatura já com os ajustes aplicados até agora, pra mostrar o total real "faltando revisar"
+  const linhasFaturaComAjustes = aplicarOverridesFatura(linhasFaturaAtual, overridesAtuais);
+  const candidatosBrutos = montarCandidatosEmAnalise(linhasFaturaAtual, linhasConsumoAtual);
+  const candidatos = candidatosBrutos.filter((c) => !(c.ligacao in overridesAtuais)); // já ajustadas somem da lista
+  const totaisPorCiclo = totalEmAnaliseporCiclo(linhasFaturaComAjustes);
+
+  const resumoDiv = document.getElementById('resumo-em-analise-ciclos');
+  resumoDiv.innerHTML = '';
+  Object.entries(totaisPorCiclo)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .forEach(([grupo, total]) => {
+      const acimaDoLimite = total > LIMITE_EM_ANALISE;
+      const span = document.createElement('span');
+      span.className = 'chip-ciclo' + (acimaDoLimite ? ' chip-alerta' : '');
+      span.textContent = `Ciclo ${grupo}: ${formatarMoeda(total)}`;
+      resumoDiv.appendChild(span);
+    });
+
+  const tbody = document.querySelector('#tabela-em-analise tbody');
+  tbody.innerHTML = '';
+  // só mostra candidatos de ciclos acima do limite, Residencial/Social primeiro, maior valor primeiro
+  const relevantes = candidatos.filter((c) => (totaisPorCiclo[c.grupo] || 0) > LIMITE_EM_ANALISE);
+
+  if (relevantes.length === 0) {
+    blocoEmAnalise.hidden = candidatos.length === 0; // some só se não houver Em Análise nenhum
+    if (candidatos.length > 0) {
+      tbody.innerHTML = '<tr><td colspan="10">Nenhum ciclo passou de R$ 100.000 em Em Análise. Nada para revisar.</td></tr>';
+      blocoEmAnalise.hidden = false;
+    }
+    return;
+  }
+
+  blocoEmAnalise.hidden = false;
+  relevantes.forEach((c) => {
+    const tr = document.createElement('tr');
+    const semSugestao = c.valorMinimoSugerido === null;
+    tr.innerHTML = `
+      <td><input type="checkbox" class="chk-ajuste" data-ligacao="${c.ligacao}" data-valor="${c.valorMinimoSugerido || ''}" ${semSugestao ? 'disabled' : ''} /></td>
+      <td>${c.ligacao}</td>
+      <td>${c.nomeCliente || ''}</td>
+      <td>${c.grupo}</td>
+      <td>${c.categoria || '—'}</td>
+      <td>${c.numEconomias ?? '—'}</td>
+      <td>${c.consumoFaturadoM3 ?? '—'}</td>
+      <td>${c.minimoM3 ?? '—'}</td>
+      <td>${formatarMoeda(c.valorAtual)}</td>
+      <td>${semSugestao ? 'sem categoria reconhecida' : formatarMoeda(c.valorMinimoSugerido)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+btnAplicarAjustes.addEventListener('click', () => {
+  const marcados = document.querySelectorAll('.chk-ajuste:checked');
+  marcados.forEach((chk) => {
+    const ligacao = chk.dataset.ligacao;
+    const valor = parseFloat(chk.dataset.valor);
+    if (ligacao && !Number.isNaN(valor)) overridesAtuais[ligacao] = valor;
+  });
+
+  if (Object.keys(overridesAtuais).length === 0) {
+    processarStatus.textContent = 'Marque pelo menos uma matrícula antes de aplicar.';
+    return;
+  }
+
+  const resumo = calcularResumo(linhasFaturaAtual, linhasServicoAtual, referenciaAtual, overridesAtuais);
+  renderResumo(resumo);
+  resumoCalculadoPendente = resumo;
+  renderEmAnalise();
+  processarStatus.textContent = `${Object.keys(overridesAtuais).length} matrícula(s) ajustada(s) para o mínimo. Totais recalculados — confira antes de publicar.`;
 });
 
 // ---------------------------------------------------------------------

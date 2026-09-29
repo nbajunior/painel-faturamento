@@ -105,6 +105,28 @@
         </table>
       </section>
 
+      <section class="bloco" id="bloco-em-analise" hidden>
+        <h2>Revisão de "Em Análise"</h2>
+        <p class="texto-explicativo">
+          Matrículas de água com Situação Conta = Em Análise, por ciclo. Ciclos acima de
+          <strong>R$ 100.000</strong> em Em Análise aparecem destacados. Marque as matrículas que
+          quer ajustar para o valor mínimo sugerido (Residencial/Social com consumo muito acima
+          do normal, priorizando 1-2 economias) e clique em Aplicar ajustes.
+        </p>
+        <div id="resumo-em-analise-ciclos"></div>
+        <table class="tabela" id="tabela-em-analise">
+          <thead>
+            <tr>
+              <th></th><th>Ligação</th><th>Cliente</th><th>Ciclo</th><th>Categoria</th>
+              <th>Economias</th><th>Consumo (m³)</th><th>Mín. sugerido (m³)</th>
+              <th>Valor atual</th><th>Valor mínimo sugerido</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <button id="btn-aplicar-ajustes" class="botao-primario">Aplicar ajustes selecionados e recalcular</button>
+      </section>
+
       <section class="bloco bloco-upload">
         <h2>Atualizar dados</h2>
         <p class="texto-explicativo">
@@ -120,6 +142,9 @@
 
         <label for="input-servico">Serviço Avulso (.csv)</label>
         <input type="file" id="input-servico" accept=".csv" />
+
+        <label for="input-consumo">Consumo (.csv)</label>
+        <input type="file" id="input-consumo" accept=".csv" />
 
         <button id="btn-processar" class="botao-primario">Processar</button>
         <div id="progresso" class="progresso" hidden></div>
@@ -137,6 +162,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
   <script src="js/categorization.js"></script>
   <script src="js/parsers.js"></script>
+  <script src="js/tarifas.js"></script>
   <script src="js/calculations.js"></script>
   <script type="module" src="js/app.js"></script>
 </body>
