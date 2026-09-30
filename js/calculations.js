@@ -10,7 +10,7 @@
 'use strict';
 
 const { parseNumeroBR } = window.Parsers;
-const { classificarRubricaFatura, classificarRubricaIndireta, CATEGORIAS_INDIRETA } = window.Categorization;
+const { classificarRubricaFatura, classificarRubricaIndireta, CATEGORIAS_INDIRETA, localidadeValida } = window.Categorization;
 
 /**
  * Processa a base de Fatura de Ciclo: separa Faturamento direto (Água/Esgoto)
@@ -74,6 +74,7 @@ function calcularIndiretas(linhasServico) {
     naoMapeadas: {}, // { rubrica: {valor, contagem} } - pra revisão manual
     totalIndiretas: 0,
     totalLinhas: linhasServico.length,
+    linhasForaDaArea: 0, // linhas descartadas por serem de outra Superintendência
   };
 
   CATEGORIAS_INDIRETA.forEach((c) => {
@@ -81,6 +82,10 @@ function calcularIndiretas(linhasServico) {
   });
 
   for (const linha of linhasServico) {
+    if (!localidadeValida(linha['Nome da Localidade'])) {
+      resultado.linhasForaDaArea += 1;
+      continue;
+    }
     const rubrica = linha['Rubrica'];
     const categoria = classificarRubricaIndireta(rubrica);
     const valor = parseNumeroBR(linha['Valor Parcela']);

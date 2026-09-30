@@ -148,6 +148,13 @@ function renderResumo(resumo) {
     avisoNaoMapeadas.hidden = true;
   }
 
+  const infoForaDaArea = document.getElementById('info-fora-da-area');
+  const foraDaArea = resumo.indiretas.linhasForaDaArea || 0;
+  infoForaDaArea.textContent =
+    foraDaArea > 0
+      ? `${foraDaArea.toLocaleString('pt-BR')} linha(s) do Serviço Avulso descartadas por serem de outra Superintendência.`
+      : '';
+
   // Tabela por ciclo
   const tbodyCiclos = document.querySelector('#tabela-ciclos tbody');
   tbodyCiclos.innerHTML = '';

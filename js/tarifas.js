@@ -45,10 +45,16 @@ const BANDAS = {
 };
 
 /** Valor (R$) de UMA economia consumindo `consumoPorEconomia` m³, na categoria dada. */
-function valorPorEconomia(categoriaNormalizada, consumoPorEconomia) {
+function valorPorEconomia(categoriaNormalizada, consumoPorEconomiaOriginal) {
   const bandas = BANDAS[categoriaNormalizada];
   if (!bandas) return null;
   const minimo = MINIMOS_M3[categoriaNormalizada];
+
+  // SOCIAL ESPECIAL não paga excedente: consumo acima do mínimo não é cobrado,
+  // então a conta é calculada como se o consumo fosse, no máximo, o mínimo.
+  const consumoPorEconomia =
+    categoriaNormalizada === 'SOCIAL ESPECIAL' ? Math.min(consumoPorEconomiaOriginal, minimo) : consumoPorEconomiaOriginal;
+
   const ultrapassaMinimo = consumoPorEconomia > minimo;
 
   let restante = consumoPorEconomia;

@@ -162,6 +162,31 @@ Object.keys(INDIRETA_RAW_MAP).forEach((rubrica) => {
 
 const CATEGORIAS_INDIRETA = ['CORTE', 'RELIGAÇÃO', 'LNA', 'LNE', 'SANÇÃO', 'OUTROS'];
 
+// ---------------------------------------------------------------------
+// Localidades (cidades) que pertencem a esta Superintendência. A base de
+// Serviço Avulso vem misturada com cidades de outras Superintendências, que
+// precisam ser descartadas antes de somar qualquer coisa.
+// ---------------------------------------------------------------------
+const LOCALIDADES_VALIDAS = [
+  'APERIBE',
+  'CAMBUCI',
+  'CORDEIRO',
+  'CANTAGALO',
+  'DUAS BARRAS',
+  'ITAOCARA',
+  'MIRACEMA',
+  'RIO BONITO',
+  'S.FCO.DO ITABAPOANA', // São Francisco de Itabapoana
+  'S.SEBASTIAO DO ALTO', // São Sebastião do Alto
+  'CACHOEIRAS DE MACACU',
+  'CASIMIRO DE ABREU',
+].map(normalizeKey);
+
+/** true se a localidade pertence às 12 cidades desta Superintendência. */
+function localidadeValida(nomeLocalidade) {
+  return LOCALIDADES_VALIDAS.includes(normalizeKey(nomeLocalidade));
+}
+
 /** Classifica uma rubrica da Fatura de Ciclo. Retorna 'AGUA' | 'ESGOTO' | 'CANCELAMENTO' | null */
 function classificarRubricaFatura(rubrica) {
   const key = normalizeKey(rubrica);
@@ -186,5 +211,6 @@ window.Categorization = {
   classificarRubricaIndireta,
   CATEGORIAS_INDIRETA,
   INDIRETA_MAP,
+  localidadeValida,
 };
 })();
