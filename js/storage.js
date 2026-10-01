@@ -18,6 +18,21 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js';
 import { db } from './auth.js';
 
+const COLECAO_ORCADO = 'orcados';
+
+/** Salva o Orçado (RF/Sup por linha do DRE) de uma referência. */
+async function salvarOrcado(referencia, orcado, usuarioEmail) {
+  const ref = doc(db, COLECAO_ORCADO, referencia);
+  await setDoc(ref, { referencia, orcado, atualizadoPor: usuarioEmail, atualizadoEm: new Date().toISOString() });
+}
+
+/** Busca o Orçado salvo de uma referência. Retorna {} se não existir ainda. */
+async function buscarOrcado(referencia) {
+  const ref = doc(db, COLECAO_ORCADO, referencia);
+  const snap = await getDoc(ref);
+  return snap.exists() ? snap.data().orcado || {} : {};
+}
+
 const COLECAO = 'ciclos';
 
 /** Salva (ou substitui) o resumo de uma referência. */
@@ -44,4 +59,4 @@ async function buscarResumoPorReferencia(referencia) {
   return snap.exists() ? snap.data() : null;
 }
 
-export { salvarResumo, buscarUltimoResumo, buscarResumoPorReferencia };
+export { salvarResumo, buscarUltimoResumo, buscarResumoPorReferencia, salvarOrcado, buscarOrcado };

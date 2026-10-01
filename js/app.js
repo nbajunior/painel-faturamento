@@ -6,12 +6,14 @@
  */
 
 import { auth, fazerLogin, fazerLogout, recuperarSenha, observarLogin } from './auth.js';
-import { salvarResumo, buscarUltimoResumo } from './storage.js';
+import { salvarResumo, buscarUltimoResumo, salvarOrcado, buscarOrcado } from './storage.js';
 
 const { lerCSV } = window.Parsers;
 const { calcularResumo, montarCandidatosEmAnalise, totalEmAnaliseporCiclo, aplicarOverridesFatura } = window.Calculations;
+const { montarLinhasDRE } = window.Dre;
 
 const LIMITE_EM_ANALISE = 100000;
+let orcadoAtual = {}; // { [idLinha]: { rf, sup } } — carregado do Firestore ao abrir a referência
 
 // ---------------------------------------------------------------------
 // Elementos
@@ -103,11 +105,61 @@ observarLogin(async (usuario) => {
 async function carregarUltimoResumo() {
   try {
     const resumo = await buscarUltimoResumo();
-    if (resumo) renderResumo(resumo);
+    if (resumo) {
+      referenciaAtual = resumo.referencia;
+      renderResumo(resumo);
+      orcadoAtual = await buscarOrcado(resumo.referencia);
+      renderDRE(resumo);
+    }
   } catch (err) {
     console.error('Erro ao buscar resumo salvo:', err);
   }
 }
+
+function renderDRE(resumo) {
+  const linhas = montarLinhasDRE(resumo, orcadoAtual);
+  const tbody = document.querySelector('#tabela-dre tbody');
+  tbody.innerHTML = '';
+  linhas.forEach((linha) => {
+    const tr = document.createElement('tr');
+    const classeNome = (linha.negrito ? 'linha-negrito' : '') + (linha.nivel === 1 ? ' linha-nivel1' : '');
+    const deltaClasse = linha.deltaReais === null ? '' : linha.deltaReais >= 0 ? 'delta-positivo' : 'delta-negativo';
+    tr.innerHTML = `
+      <td class="${classeNome}">${linha.nome}</td>
+      <td><input type="text" class="input-orcado" data-id="${linha.id}" data-campo="rf" value="${linha.orcadoRF ?? ''}" /></td>
+      <td><input type="text" class="input-orcado" data-id="${linha.id}" data-campo="sup" value="${linha.orcadoSup ?? ''}" /></td>
+      <td>${formatarMoeda(linha.realizado)}</td>
+      <td class="${deltaClasse}">${linha.deltaPercentual === null ? '—' : linha.deltaPercentual.toFixed(1) + '%'}</td>
+      <td class="${deltaClasse}">${linha.deltaReais === null ? '—' : formatarMoeda(linha.deltaReais)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+document.getElementById('btn-salvar-orcado').addEventListener('click', async () => {
+  if (!referenciaAtual) {
+    document.getElementById('status-orcado').textContent = 'Processe um ciclo antes de salvar o Orçado.';
+    return;
+  }
+  const novoOrcado = {};
+  document.querySelectorAll('.input-orcado').forEach((input) => {
+    const id = input.dataset.id;
+    const campo = input.dataset.campo;
+    const valor = parseFloat(input.value.replace(',', '.'));
+    if (!novoOrcado[id]) novoOrcado[id] = {};
+    novoOrcado[id][campo] = Number.isNaN(valor) ? null : valor;
+  });
+
+  try {
+    await salvarOrcado(referenciaAtual, novoOrcado, auth.currentUser.email);
+    orcadoAtual = novoOrcado;
+    if (resumoCalculadoPendente) renderDRE(resumoCalculadoPendente);
+    document.getElementById('status-orcado').textContent = 'Orçado salvo.';
+  } catch (err) {
+    console.error(err);
+    document.getElementById('status-orcado').textContent = `Erro ao salvar Orçado: ${err.message}`;
+  }
+});
 
 function formatarMoeda(valor) {
   return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -126,6 +178,26 @@ function renderResumo(resumo) {
   document.getElementById('card-cancelamento').textContent = formatarMoeda(resumo.fatura.cancelamento);
   document.getElementById('card-indiretas').textContent = formatarMoeda(resumo.indiretas.totalIndiretas);
   document.getElementById('card-receita-total').textContent = formatarMoeda(resumo.receitaTotal);
+
+  // Economias / Volume / Tarifa / Ticket (só existe se o Consumo foi enviado)
+  const blocoIndicadores = document.getElementById('bloco-indicadores');
+  if (resumo.indicadores) {
+    blocoIndicadores.hidden = false;
+    const ind = resumo.indicadores;
+    const fmtNum = (n) => n.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+    document.getElementById('ind-economias-agua').textContent = fmtNum(ind.economiasAgua);
+    document.getElementById('ind-economias-esgoto').textContent = fmtNum(ind.economiasEsgoto);
+    document.getElementById('ind-volume-agua').textContent = fmtNum(ind.volumeAguaM3);
+    document.getElementById('ind-volume-esgoto').textContent = fmtNum(ind.volumeEsgotoM3);
+    document.getElementById('ind-volmedio-agua').textContent = fmtNum(ind.volumeMedioAgua);
+    document.getElementById('ind-volmedio-esgoto').textContent = fmtNum(ind.volumeMedioEsgoto);
+    document.getElementById('ind-tarifa-agua').textContent = formatarMoeda(ind.tarifaMediaAgua);
+    document.getElementById('ind-tarifa-esgoto').textContent = formatarMoeda(ind.tarifaMediaEsgoto);
+    document.getElementById('ind-ticket-agua').textContent = formatarMoeda(ind.ticketMedioAgua);
+    document.getElementById('ind-ticket-esgoto').textContent = formatarMoeda(ind.ticketMedioEsgoto);
+  } else {
+    blocoIndicadores.hidden = true;
+  }
 
   // Tabela indiretas por categoria
   const tbodyIndiretas = document.querySelector('#tabela-indiretas tbody');
@@ -220,9 +292,12 @@ btnProcessar.addEventListener('click', async () => {
     linhasServicoAtual = linhasServico;
     linhasConsumoAtual = linhasConsumo;
 
-    const resumo = calcularResumo(linhasFatura, linhasServico, referencia);
+    const resumo = calcularResumo(linhasFatura, linhasServico, referencia, null, linhasConsumo);
     renderResumo(resumo);
     resumoCalculadoPendente = resumo;
+
+    orcadoAtual = await buscarOrcado(referencia);
+    renderDRE(resumo);
 
     renderEmAnalise();
 
@@ -301,9 +376,10 @@ btnAplicarAjustes.addEventListener('click', () => {
     return;
   }
 
-  const resumo = calcularResumo(linhasFaturaAtual, linhasServicoAtual, referenciaAtual, overridesAtuais);
+  const resumo = calcularResumo(linhasFaturaAtual, linhasServicoAtual, referenciaAtual, overridesAtuais, linhasConsumoAtual);
   renderResumo(resumo);
   resumoCalculadoPendente = resumo;
+  renderDRE(resumo);
   renderEmAnalise();
   processarStatus.textContent = `${Object.keys(overridesAtuais).length} matrícula(s) ajustada(s) para o mínimo. Totais recalculados — confira antes de publicar.`;
 });

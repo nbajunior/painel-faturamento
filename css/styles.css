@@ -230,3 +230,29 @@ h2 { font-size: 1.05rem; color: var(--azul-profundo); }
   font-weight: 600;
 }
 #tabela-em-analise th:first-child, #tabela-em-analise td:first-child { width: 2rem; text-align: center; }
+
+/* DRE */
+#tabela-dre td.linha-negrito { font-weight: 700; }
+#tabela-dre td.linha-nivel1 { padding-left: 1.6rem; color: var(--texto-suave); }
+#tabela-dre input.input-orcado {
+  width: 100px;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--borda);
+  border-radius: 4px;
+  font-size: 0.82rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.delta-positivo { color: var(--teal); }
+.delta-negativo { color: var(--vermelho); }
+.botao-secundario-cor {
+  background: var(--azul-claro);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 0.5rem;
+}

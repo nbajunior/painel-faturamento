@@ -5,16 +5,16 @@
  * Reproduz a lógica de negócio das planilhas atuais (Fatura de Ciclo,
  * Cancelamento, Indireta), recalculada do zero.
  */
- 
+
 (function () {
 'use strict';
- 
+
 const { parseNumeroBR } = window.Parsers;
 const { classificarRubricaFatura, classificarRubricaIndireta, CATEGORIAS_INDIRETA, localidadeValida, normalizeKey } =
   window.Categorization;
- 
+
 const CHAVE_EM_ANALISE = normalizeKey('EM ANALISE'); // normalizado: robusto a "EM ANÁLISE", "Em análise" etc.
- 
+
 /**
  * Processa a base de Fatura de Ciclo: separa Faturamento direto (Água/Esgoto)
  * e Cancelamento, com detalhamento por ciclo (Grupo) e localidade.
@@ -29,7 +29,7 @@ function calcularFatura(linhasFatura) {
     linhasIgnoradas: 0,
     totalLinhas: linhasFatura.length,
   };
- 
+
   for (const linha of linhasFatura) {
     const classe = classificarRubricaFatura(linha['Rubrica']);
     if (!classe) {
@@ -39,14 +39,14 @@ function calcularFatura(linhasFatura) {
     const valor = parseNumeroBR(linha['Valor Parcela']);
     const grupo = (linha['Grupo'] || 'SEM GRUPO').trim();
     const localidade = (linha['Nome da Localidade'] || 'SEM LOCALIDADE').trim();
- 
+
     if (!resultado.porCiclo[grupo]) {
       resultado.porCiclo[grupo] = { agua: 0, esgoto: 0, cancelamento: 0, localidade };
     }
     if (!resultado.porLocalidade[localidade]) {
       resultado.porLocalidade[localidade] = { agua: 0, esgoto: 0, cancelamento: 0 };
     }
- 
+
     if (classe === 'AGUA') {
       resultado.faturamentoAgua += valor;
       resultado.porCiclo[grupo].agua += valor;
@@ -61,11 +61,11 @@ function calcularFatura(linhasFatura) {
       resultado.porLocalidade[localidade].cancelamento += valor;
     }
   }
- 
+
   resultado.faturamentoTotal = resultado.faturamentoAgua + resultado.faturamentoEsgoto;
   return resultado;
 }
- 
+
 /**
  * Processa a base de Serviço Avulso: soma por categoria de indireta
  * (CORTE, RELIGAÇÃO, LNA, LNE, SANÇÃO, OUTROS), com detalhamento por ciclo.
@@ -79,11 +79,11 @@ function calcularIndiretas(linhasServico) {
     totalLinhas: linhasServico.length,
     linhasForaDaArea: 0, // linhas descartadas por serem de outra Superintendência
   };
- 
+
   CATEGORIAS_INDIRETA.forEach((c) => {
     resultado.porCategoria[c] = 0;
   });
- 
+
   for (const linha of linhasServico) {
     if (!localidadeValida(linha['Nome da Localidade'])) {
       resultado.linhasForaDaArea += 1;
@@ -93,12 +93,12 @@ function calcularIndiretas(linhasServico) {
     const categoria = classificarRubricaIndireta(rubrica);
     const valor = parseNumeroBR(linha['Valor Parcela']);
     const grupo = (linha['Grupo'] || 'SEM GRUPO').trim();
- 
+
     if (categoria === null) {
       // Rubrica explicitamente excluída da Indireta (ex: crédito de arrecadação)
       continue;
     }
- 
+
     if (categoria === 'OUTROS_NAO_MAPEADO') {
       if (!resultado.naoMapeadas[rubrica]) resultado.naoMapeadas[rubrica] = { valor: 0, contagem: 0 };
       resultado.naoMapeadas[rubrica].valor += valor;
@@ -108,17 +108,17 @@ function calcularIndiretas(linhasServico) {
       resultado.totalIndiretas += valor;
       continue;
     }
- 
+
     resultado.porCategoria[categoria] = (resultado.porCategoria[categoria] || 0) + valor;
     resultado.totalIndiretas += valor;
- 
+
     if (!resultado.porCiclo[grupo]) resultado.porCiclo[grupo] = {};
     resultado.porCiclo[grupo][categoria] = (resultado.porCiclo[grupo][categoria] || 0) + valor;
   }
- 
+
   return resultado;
 }
- 
+
 const ECONOMIA_COLS = [
   'Qtd. Economia Residencial',
   'Qtd. Economia Comercial',
@@ -126,7 +126,7 @@ const ECONOMIA_COLS = [
   'Qtd. Economia P?blica',
   'Qtd. Economia Outros',
 ];
- 
+
 /**
  * Monta candidatos para revisão manual do "Em Análise": matrículas com
  * Rubrica água/esgoto em Situação Conta = EM ANALISE, cruzadas com o Consumo
@@ -137,7 +137,7 @@ const ECONOMIA_COLS = [
  */
 function montarCandidatosEmAnalise(linhasFatura, linhasConsumo) {
   const { calcularValorMinimo, calcularMinimoM3 } = window.Tarifas;
- 
+
   // indexa o Consumo por N. da Ligacao pra cruzar rápido
   const consumoPorLigacao = {};
   for (const linha of linhasConsumo) {
@@ -151,26 +151,26 @@ function montarCandidatosEmAnalise(linhasFatura, linhasConsumo) {
       situacaoLigacao: (linha['Situacao Ligacao'] || '').trim(),
     };
   }
- 
+
   const candidatos = [];
   for (const linha of linhasFatura) {
     const classe = classificarRubricaFatura(linha['Rubrica']);
     if (classe !== 'AGUA') continue; // o ajuste manual é sobre água
     const situacaoConta = (linha['Situacao Conta'] || '').trim().toUpperCase();
     if (normalizeKey(situacaoConta) !== CHAVE_EM_ANALISE) continue;
- 
+
     const id = linha['N. da Ligacao'];
     const consumo = consumoPorLigacao[id];
     const valorAtual = parseNumeroBR(linha['Valor Parcela']);
     const grupo = (linha['Grupo'] || 'SEM GRUPO').trim();
- 
+
     let valorMinimoSugerido = null;
     let minimoM3 = null;
     if (consumo && consumo.numEconomias > 0) {
       valorMinimoSugerido = calcularValorMinimo(consumo.categoria, consumo.numEconomias);
       minimoM3 = calcularMinimoM3(consumo.categoria, consumo.numEconomias);
     }
- 
+
     candidatos.push({
       ligacao: id,
       nomeCliente: linha['Nome Cliente'],
@@ -183,12 +183,12 @@ function montarCandidatosEmAnalise(linhasFatura, linhasConsumo) {
       valorMinimoSugerido,
     });
   }
- 
+
   // maior valor primeiro; dentro do mesmo valor, prioriza Residencial/Social com 1-2 economias
   candidatos.sort((a, b) => b.valorAtual - a.valorAtual);
   return candidatos;
 }
- 
+
 /** Soma o valor "Em Análise" (água) por ciclo — usado pra saber se passou dos ~100k. */
 function totalEmAnaliseporCiclo(linhasFatura) {
   const totais = {};
@@ -200,7 +200,7 @@ function totalEmAnaliseporCiclo(linhasFatura) {
   }
   return totais;
 }
- 
+
 /**
  * Indicadores de volume/ticket, cruzando Fatura (quem tem água/esgoto faturado e por quanto)
  * com Consumo (quantas economias e quantos m³ cada ligação tem). Mesma lógica do bloco
@@ -217,7 +217,7 @@ function calcularIndicadoresConsumo(linhasFatura, linhasConsumo, fatura) {
       consumoFaturado: parseNumeroBR(linha['Consumo Faturado']),
     };
   }
- 
+
   const ligacoesAgua = new Set();
   const ligacoesEsgoto = new Set();
   for (const linha of linhasFatura) {
@@ -225,7 +225,7 @@ function calcularIndicadoresConsumo(linhasFatura, linhasConsumo, fatura) {
     if (classe === 'AGUA') ligacoesAgua.add(linha['N. da Ligacao']);
     if (classe === 'ESGOTO') ligacoesEsgoto.add(linha['N. da Ligacao']);
   }
- 
+
   function somar(setLigacoes) {
     let economias = 0;
     let volume = 0;
@@ -237,12 +237,12 @@ function calcularIndicadoresConsumo(linhasFatura, linhasConsumo, fatura) {
     }
     return { economias, volume };
   }
- 
+
   const agua = somar(ligacoesAgua);
   const esgoto = somar(ligacoesEsgoto);
- 
+
   const divSeguro = (a, b) => (b > 0 ? a / b : 0);
- 
+
   return {
     economiasAgua: agua.economias,
     economiasEsgoto: esgoto.economias,
@@ -256,7 +256,7 @@ function calcularIndicadoresConsumo(linhasFatura, linhasConsumo, fatura) {
     ticketMedioEsgoto: divSeguro(fatura.faturamentoEsgoto, esgoto.economias),
   };
 }
- 
+
 /** Aplica os ajustes manuais de "Em Análise" (override de Valor Parcela) sobre a Fatura. */
 function aplicarOverridesFatura(linhasFatura, overrides) {
   if (!overrides || Object.keys(overrides).length === 0) return linhasFatura;
@@ -266,7 +266,7 @@ function aplicarOverridesFatura(linhasFatura, overrides) {
     return { ...linha, 'Valor Parcela': String(novoValor).replace('.', ',') };
   });
 }
- 
+
 /**
  * Monta o resumo consolidado (o que vai ser salvo no Firestore e exibido no painel).
  * `overrides` é um objeto opcional { [N. da Ligacao]: novoValor } com os ajustes
@@ -277,7 +277,7 @@ function calcularResumo(linhasFatura, linhasServico, referencia, overrides, linh
   const fatura = calcularFatura(linhasFaturaAjustadas);
   const indiretas = calcularIndiretas(linhasServico);
   const indicadores = linhasConsumo ? calcularIndicadoresConsumo(linhasFaturaAjustadas, linhasConsumo, fatura) : null;
- 
+
   return {
     referencia,
     geradoEm: new Date().toISOString(),
@@ -288,7 +288,7 @@ function calcularResumo(linhasFatura, linhasServico, referencia, overrides, linh
     receitaTotal: fatura.faturamentoTotal + fatura.cancelamento + indiretas.totalIndiretas,
   };
 }
- 
+
 /** Dada uma referência "MM-YYYY" (ex: "09-2026"), devolve a referência do mês anterior ("08-2026"). */
 function referenciaAnterior(referencia) {
   const m = /^(\d{2})-(\d{4})$/.exec((referencia || '').trim());
@@ -302,7 +302,7 @@ function referenciaAnterior(referencia) {
   }
   return `${String(mes).padStart(2, '0')}-${ano}`;
 }
- 
+
 /** Monta a tabela de comparação entre o resumo atual e o resumo do mês anterior. */
 function compararComMesAnterior(resumoAtual, resumoAnterior) {
   const linhas = [
@@ -319,7 +319,7 @@ function compararComMesAnterior(resumoAtual, resumoAnterior) {
     return { nome, atual, anterior, diffReais, diffPercentual };
   });
 }
- 
+
 window.Calculations = {
   calcularFatura,
   calcularIndiretas,

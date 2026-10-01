@@ -84,6 +84,25 @@
         </div>
       </section>
 
+      <section class="bloco">
+        <h2>DRE</h2>
+        <p class="texto-explicativo">
+          O Orçado é digitado manualmente por enquanto (RF e Sup). Edite os campos e clique em
+          "Salvar Orçado" — fica guardado pra essa referência, sem precisar redigitar depois.
+        </p>
+        <table class="tabela" id="tabela-dre">
+          <thead>
+            <tr>
+              <th>Linha</th><th>Orçado RF</th><th>Orçado Sup</th><th>Realizado</th>
+              <th>Δ (%)</th><th>Δ (R$)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <button id="btn-salvar-orcado" class="botao-primario">Salvar Orçado</button>
+        <p id="status-orcado" class="mensagem-status"></p>
+      </section>
+
       <section class="bloco" id="bloco-comparativo" hidden>
         <h2>Comparativo com mês anterior</h2>
         <div id="comparativo-encontrado" hidden>
@@ -204,6 +223,7 @@
   <script src="js/parsers.js"></script>
   <script src="js/tarifas.js"></script>
   <script src="js/calculations.js"></script>
+  <script src="js/dre.js"></script>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>
