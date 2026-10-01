@@ -84,6 +84,44 @@
         </div>
       </section>
 
+      <section class="bloco" id="bloco-comparativo" hidden>
+        <h2>Comparativo com mês anterior</h2>
+        <div id="comparativo-encontrado" hidden>
+          <table class="tabela" id="tabela-comparativo">
+            <thead>
+              <tr><th>Métrica</th><th>Mês atual</th><th>Mês anterior</th><th>Δ R$</th><th>Δ %</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div id="comparativo-nao-encontrado" hidden>
+          <p class="texto-explicativo">
+            Ainda não tenho o resumo do mês anterior (<strong id="ref-anterior-label"></strong>) salvo.
+            Suba só a Fatura de Ciclo dele uma vez — depois disso o painel lembra sozinho, sem precisar
+            reenviar todo mês.
+          </p>
+          <input type="file" id="input-fatura-anterior" accept=".csv" />
+          <button id="btn-processar-anterior" class="botao-secundario-cor">Processar e salvar mês anterior</button>
+          <p id="status-anterior" class="mensagem-status"></p>
+        </div>
+      </section>
+
+      <section class="bloco" id="bloco-indicadores" hidden>
+        <h2>Economias, Volume e Tarifa</h2>
+        <table class="tabela" id="tabela-indicadores">
+          <thead>
+            <tr><th></th><th>Água</th><th>Esgoto</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Economias Faturadas</td><td id="ind-economias-agua"></td><td id="ind-economias-esgoto"></td></tr>
+            <tr><td>Volume Faturado (m³)</td><td id="ind-volume-agua"></td><td id="ind-volume-esgoto"></td></tr>
+            <tr><td>Volume Médio Faturado (m³)</td><td id="ind-volmedio-agua"></td><td id="ind-volmedio-esgoto"></td></tr>
+            <tr><td>Tarifa Média (R$/m³)</td><td id="ind-tarifa-agua"></td><td id="ind-tarifa-esgoto"></td></tr>
+            <tr><td>Ticket Médio (R$)</td><td id="ind-ticket-agua"></td><td id="ind-ticket-esgoto"></td></tr>
+          </tbody>
+        </table>
+      </section>
+
       <section class="bloco">
         <h2>Indiretas por categoria</h2>
         <table class="tabela" id="tabela-indiretas">
