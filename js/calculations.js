@@ -72,7 +72,8 @@ function calcularFatura(linhasFatura) {
  */
 function calcularIndiretas(linhasServico) {
   const resultado = {
-    porCategoria: {}, // { categoria: valor }
+    porCategoria: {}, // { categoria: valor R$ }
+    porCategoriaContagem: {}, // { categoria: nº de eventos/linhas }
     porCiclo: {}, // { grupo: { categoria: valor } }
     naoMapeadas: {}, // { rubrica: {valor, contagem} } - pra revisão manual
     totalIndiretas: 0,
@@ -82,6 +83,7 @@ function calcularIndiretas(linhasServico) {
 
   CATEGORIAS_INDIRETA.forEach((c) => {
     resultado.porCategoria[c] = 0;
+    resultado.porCategoriaContagem[c] = 0;
   });
 
   for (const linha of linhasServico) {
