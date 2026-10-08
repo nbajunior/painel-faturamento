@@ -6,10 +6,26 @@
  */
 
 import { auth, fazerLogin, fazerLogout, recuperarSenha, observarLogin } from './auth.js';
-import { salvarResumo, buscarUltimoResumo, salvarOrcado, buscarOrcado } from './storage.js';
+import {
+  salvarResumo,
+  salvarResumoAnteriorParcial,
+  buscarUltimoResumo,
+  buscarResumoPorReferencia,
+  salvarOrcado,
+  buscarOrcado,
+} from './storage.js';
 
 const { lerCSV } = window.Parsers;
-const { calcularResumo, montarCandidatosEmAnalise, totalEmAnaliseporCiclo, aplicarOverridesFatura } = window.Calculations;
+const {
+  calcularResumo,
+  calcularResumoParcial,
+  montarCandidatosEmAnalise,
+  totalEmAnaliseporCiclo,
+  aplicarOverridesFatura,
+  referenciaAnterior,
+  normalizarReferencia,
+  compararComMesAnterior,
+} = window.Calculations;
 const { montarLinhasDRE } = window.Dre;
 
 const LIMITE_EM_ANALISE = 100000;
@@ -37,6 +53,7 @@ const progresso = document.getElementById('progresso');
 const blocoEmAnalise = document.getElementById('bloco-em-analise');
 
 let resumoCalculadoPendente = null; // guarda o último resumo calculado, aguardando publicação
+let resumoExibido = null; // o resumo que está na tela agora (publicado ou recém-calculado)
 let referenciaAtual = null;
 let linhasFaturaAtual = null; // guarda os dados já lidos, pra poder recalcular ao aplicar ajustes
 let linhasServicoAtual = null;
@@ -154,7 +171,7 @@ document.getElementById('btn-salvar-orcado').addEventListener('click', async () 
   try {
     await salvarOrcado(referenciaAtual, novoOrcado, auth.currentUser.email);
     orcadoAtual = novoOrcado;
-    if (resumoCalculadoPendente) renderDRE(resumoCalculadoPendente);
+    if (resumoExibido) renderDRE(resumoExibido);
     document.getElementById('status-orcado').textContent = 'Orçado salvo.';
   } catch (err) {
     console.error(err);
@@ -167,6 +184,9 @@ function formatarMoeda(valor) {
 }
 
 function renderResumo(resumo) {
+  resumoExibido = resumo;
+  atualizarComparativo(resumo); // assíncrono: busca o mês anterior sem travar o resto da tela
+
   document.getElementById('status-referencia').textContent = resumo.referencia || '—';
   document.getElementById('status-atualizado-por').textContent = resumo.atualizadoPor || '—';
   document.getElementById('status-atualizado-em').textContent = resumo.geradoEm
@@ -252,15 +272,18 @@ function renderResumo(resumo) {
 // Processar (ler + calcular, sem publicar ainda)
 // ---------------------------------------------------------------------
 btnProcessar.addEventListener('click', async () => {
-  const referencia = document.getElementById('input-referencia').value.trim();
+  const inputReferencia = document.getElementById('input-referencia');
   const arquivoFatura = document.getElementById('input-fatura').files[0];
   const arquivoServico = document.getElementById('input-servico').files[0];
   const arquivoConsumo = document.getElementById('input-consumo').files[0];
 
+  // a referência vira o ID do documento e define qual é o "mês anterior", então precisa estar no padrão MM-YYYY
+  const referencia = normalizarReferencia(inputReferencia.value);
   if (!referencia) {
-    processarStatus.textContent = 'Preencha a referência (ex: 09-2026).';
+    processarStatus.textContent = 'Preencha a referência no formato mês-ano (ex: 09-2026).';
     return;
   }
+  inputReferencia.value = referencia;
   if (!arquivoFatura || !arquivoServico || !arquivoConsumo) {
     processarStatus.textContent = 'Selecione os três arquivos (Fatura de Ciclo, Serviço Avulso e Consumo).';
     return;
@@ -383,6 +406,120 @@ btnAplicarAjustes.addEventListener('click', () => {
   renderDRE(resumo);
   renderEmAnalise();
   processarStatus.textContent = `${Object.keys(overridesAtuais).length} matrícula(s) ajustada(s) para o mínimo. Totais recalculados — confira antes de publicar.`;
+});
+
+// ---------------------------------------------------------------------
+// Comparativo com o mês anterior
+// ---------------------------------------------------------------------
+const blocoComparativo = document.getElementById('bloco-comparativo');
+const divComparativoEncontrado = document.getElementById('comparativo-encontrado');
+const divComparativoNaoEncontrado = document.getElementById('comparativo-nao-encontrado');
+const notaComparativoParcial = document.getElementById('nota-comparativo-parcial');
+const inputFaturaAnterior = document.getElementById('input-fatura-anterior');
+const btnProcessarAnterior = document.getElementById('btn-processar-anterior');
+const statusAnterior = document.getElementById('status-anterior');
+
+// evita buscar o mesmo mês anterior no Firestore a cada recálculo (ex: ao aplicar ajustes de Em Análise)
+let cacheAnterior = { referencia: null, resumo: null };
+// se dois carregamentos se cruzarem, só o mais recente pode desenhar na tela
+let tokenComparativo = 0;
+
+async function atualizarComparativo(resumo) {
+  const token = ++tokenComparativo;
+  const refAnterior = referenciaAnterior(resumo && resumo.referencia);
+  if (!refAnterior) {
+    blocoComparativo.hidden = true;
+    return;
+  }
+
+  let anterior;
+  if (cacheAnterior.referencia === refAnterior) {
+    anterior = cacheAnterior.resumo;
+  } else {
+    try {
+      anterior = await buscarResumoPorReferencia(refAnterior);
+    } catch (err) {
+      console.error('Erro ao buscar o mês anterior:', err);
+      if (token === tokenComparativo) blocoComparativo.hidden = true;
+      return;
+    }
+    cacheAnterior = { referencia: refAnterior, resumo: anterior };
+  }
+  if (token !== tokenComparativo) return;
+
+  blocoComparativo.hidden = false;
+  if (anterior) {
+    renderTabelaComparativo(resumo, anterior);
+    divComparativoEncontrado.hidden = false;
+    divComparativoNaoEncontrado.hidden = true;
+  } else {
+    document.getElementById('ref-anterior-label').textContent = refAnterior;
+    statusAnterior.textContent = '';
+    divComparativoEncontrado.hidden = true;
+    divComparativoNaoEncontrado.hidden = false;
+  }
+}
+
+function renderTabelaComparativo(atual, anterior) {
+  const tbody = document.querySelector('#tabela-comparativo tbody');
+  tbody.innerHTML = '';
+  const fmtOuTraco = (v) => (v === null ? '—' : formatarMoeda(v));
+
+  compararComMesAnterior(atual, anterior).forEach((l) => {
+    const classe = l.diffReais === null ? '' : l.diffReais >= 0 ? 'delta-positivo' : 'delta-negativo';
+    const percentual =
+      l.diffPercentual === null ? '—' : `${l.diffPercentual >= 0 ? '+' : ''}${l.diffPercentual.toFixed(1)}%`;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${l.nome}</td>
+      <td>${fmtOuTraco(l.atual)}</td>
+      <td>${fmtOuTraco(l.anterior)}</td>
+      <td class="${classe}">${fmtOuTraco(l.diffReais)}</td>
+      <td class="${classe}">${percentual}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  notaComparativoParcial.hidden = !anterior.parcial;
+  if (anterior.parcial) {
+    notaComparativoParcial.textContent =
+      `O mês ${anterior.referencia} foi salvo só com a Fatura de Ciclo, então Indiretas e Receita Total ` +
+      `não entram na comparação. Se esse mês for processado e publicado completo um dia, ele passa a valer aqui.`;
+  }
+}
+
+btnProcessarAnterior.addEventListener('click', async () => {
+  const refAnterior = referenciaAnterior(resumoExibido && resumoExibido.referencia);
+  const arquivo = inputFaturaAnterior.files[0];
+  if (!refAnterior) return;
+  if (!arquivo) {
+    statusAnterior.textContent = `Selecione o CSV da Fatura de Ciclo de ${refAnterior}.`;
+    return;
+  }
+
+  btnProcessarAnterior.disabled = true;
+  try {
+    const linhas = await lerCSV(arquivo, (n) => {
+      statusAnterior.textContent = `Lendo Fatura de Ciclo de ${refAnterior}... ${n.toLocaleString('pt-BR')} linhas`;
+    });
+    statusAnterior.textContent = 'Calculando...';
+    const parcial = calcularResumoParcial(linhas, refAnterior);
+    if (parcial.fatura.faturamentoTotal === 0) {
+      throw new Error('nenhuma linha de Água/Esgoto encontrada. Confira se o arquivo é a Fatura de Ciclo.');
+    }
+
+    statusAnterior.textContent = 'Salvando...';
+    await salvarResumoAnteriorParcial(parcial, auth.currentUser.email);
+    cacheAnterior = { referencia: refAnterior, resumo: { ...parcial, atualizadoPor: auth.currentUser.email } };
+    inputFaturaAnterior.value = '';
+    statusAnterior.textContent = '';
+    await atualizarComparativo(resumoExibido);
+  } catch (err) {
+    console.error(err);
+    statusAnterior.textContent = `Erro: ${err.message}`;
+  } finally {
+    btnProcessarAnterior.disabled = false;
+  }
 });
 
 // ---------------------------------------------------------------------

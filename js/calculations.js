@@ -72,8 +72,7 @@ function calcularFatura(linhasFatura) {
  */
 function calcularIndiretas(linhasServico) {
   const resultado = {
-    porCategoria: {}, // { categoria: valor R$ }
-    porCategoriaContagem: {}, // { categoria: nº de eventos/linhas }
+    porCategoria: {}, // { categoria: valor }
     porCiclo: {}, // { grupo: { categoria: valor } }
     naoMapeadas: {}, // { rubrica: {valor, contagem} } - pra revisão manual
     totalIndiretas: 0,
@@ -83,7 +82,6 @@ function calcularIndiretas(linhasServico) {
 
   CATEGORIAS_INDIRETA.forEach((c) => {
     resultado.porCategoria[c] = 0;
-    resultado.porCategoriaContagem[c] = 0;
   });
 
   for (const linha of linhasServico) {
@@ -305,17 +303,63 @@ function referenciaAnterior(referencia) {
   return `${String(mes).padStart(2, '0')}-${ano}`;
 }
 
-/** Monta a tabela de comparação entre o resumo atual e o resumo do mês anterior. */
+/**
+ * Padroniza o que a pessoa digitou como referência para "MM-YYYY".
+ * Aceita "9-2026", "09/2026", "09.2026" etc. Retorna null se não for um mês válido.
+ */
+function normalizarReferencia(texto) {
+  const m = /^\s*(\d{1,2})\s*[-/.]\s*(\d{4})\s*$/.exec(texto || '');
+  if (!m) return null;
+  const mes = parseInt(m[1], 10);
+  if (mes < 1 || mes > 12) return null;
+  return `${String(mes).padStart(2, '0')}-${m[2]}`;
+}
+
+/** Número ordenável de uma referência "MM-YYYY" (ex: "09-2026" -> 202609). -1 se inválida. */
+function ordemReferencia(referencia) {
+  const m = /^(\d{2})-(\d{4})$/.exec((referencia || '').trim());
+  return m ? parseInt(m[2], 10) * 100 + parseInt(m[1], 10) : -1;
+}
+
+/**
+ * Resumo "parcial" de um mês anterior, feito só com a Fatura de Ciclo. Serve apenas
+ * de base para o comparativo: não tem Indiretas, Indicadores nem Receita Total, e
+ * nunca é mostrado como o resumo principal do painel (ver storage.buscarUltimoResumo).
+ */
+function calcularResumoParcial(linhasFatura, referencia) {
+  return {
+    referencia,
+    geradoEm: new Date().toISOString(),
+    fatura: calcularFatura(linhasFatura),
+    indiretas: null,
+    indicadores: null,
+    receitaTotal: null,
+    parcial: true,
+  };
+}
+
+/**
+ * Monta a tabela de comparação entre o resumo atual e o resumo do mês anterior.
+ * Se uma métrica não existir em um dos lados (ex: mês anterior parcial, sem
+ * Indiretas), ela volta com anterior/diferenças = null, para exibir "—".
+ */
 function compararComMesAnterior(resumoAtual, resumoAnterior) {
-  const linhas = [
-    ['Faturamento Água', resumoAtual.fatura.faturamentoAgua, resumoAnterior.fatura.faturamentoAgua],
-    ['Faturamento Esgoto', resumoAtual.fatura.faturamentoEsgoto, resumoAnterior.fatura.faturamentoEsgoto],
-    ['Faturamento Total', resumoAtual.fatura.faturamentoTotal, resumoAnterior.fatura.faturamentoTotal],
-    ['Cancelamento', resumoAtual.fatura.cancelamento, resumoAnterior.fatura.cancelamento],
-    ['Indiretas', resumoAtual.indiretas.totalIndiretas, resumoAnterior.indiretas.totalIndiretas],
-    ['Receita Total', resumoAtual.receitaTotal, resumoAnterior.receitaTotal],
+  const metricas = [
+    ['Faturamento Água', (r) => r?.fatura?.faturamentoAgua],
+    ['Faturamento Esgoto', (r) => r?.fatura?.faturamentoEsgoto],
+    ['Faturamento Total', (r) => r?.fatura?.faturamentoTotal],
+    ['Cancelamento', (r) => r?.fatura?.cancelamento],
+    ['Indiretas', (r) => r?.indiretas?.totalIndiretas],
+    ['Receita Total', (r) => r?.receitaTotal],
   ];
-  return linhas.map(([nome, atual, anterior]) => {
+  const numeroOuNull = (x) => (typeof x === 'number' && !Number.isNaN(x) ? x : null);
+
+  return metricas.map(([nome, extrair]) => {
+    const atual = numeroOuNull(extrair(resumoAtual));
+    const anterior = numeroOuNull(extrair(resumoAnterior));
+    if (atual === null || anterior === null) {
+      return { nome, atual, anterior, diffReais: null, diffPercentual: null };
+    }
     const diffReais = atual - anterior;
     const diffPercentual = anterior !== 0 ? (diffReais / Math.abs(anterior)) * 100 : null;
     return { nome, atual, anterior, diffReais, diffPercentual };
@@ -330,5 +374,10 @@ window.Calculations = {
   totalEmAnaliseporCiclo,
   aplicarOverridesFatura,
   calcularIndicadoresConsumo,
+  calcularResumoParcial,
+  referenciaAnterior,
+  normalizarReferencia,
+  ordemReferencia,
+  compararComMesAnterior,
 };
 })();

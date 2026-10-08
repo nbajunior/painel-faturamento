@@ -7,15 +7,7 @@
  * que abre o painel lê o mesmo documento.
  */
 
-import {
-  doc,
-  setDoc,
-  getDoc,
-  collection,
-  getDocs,
-  orderBy,
-  query,
-} from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js';
+import { doc, setDoc, getDoc, collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js';
 import { db } from './auth.js';
 
 const COLECAO_ORCADO = 'orcados';
@@ -35,7 +27,7 @@ async function buscarOrcado(referencia) {
 
 const COLECAO = 'ciclos';
 
-/** Salva (ou substitui) o resumo de uma referência. */
+/** Salva (ou substitui) o resumo completo de uma referência. */
 async function salvarResumo(resumo, usuarioEmail) {
   const ref = doc(db, COLECAO, resumo.referencia);
   await setDoc(ref, {
@@ -44,19 +36,51 @@ async function salvarResumo(resumo, usuarioEmail) {
   });
 }
 
-/** Busca o resumo mais recente salvo (o que todo mundo deve ver ao abrir o painel). */
-async function buscarUltimoResumo() {
-  const q = query(collection(db, COLECAO), orderBy('geradoEm', 'desc'));
-  const snap = await getDocs(q);
-  if (snap.empty) return null;
-  return snap.docs[0].data();
+/**
+ * Salva o resumo PARCIAL de um mês anterior (só Fatura de Ciclo), usado só no
+ * comparativo. Nunca substitui um resumo completo que já exista para a referência.
+ */
+async function salvarResumoAnteriorParcial(resumo, usuarioEmail) {
+  const ref = doc(db, COLECAO, resumo.referencia);
+  const snap = await getDoc(ref);
+  if (snap.exists() && !snap.data().parcial) {
+    throw new Error(`Já existe um resumo completo de ${resumo.referencia}; ele não foi substituído.`);
+  }
+  await setDoc(ref, { ...resumo, atualizadoPor: usuarioEmail });
 }
 
-/** Busca o resumo de uma referência específica (usado na Fase 2, para comparação mês a mês). */
+/**
+ * Busca o resumo que todo mundo deve ver ao abrir o painel: o da referência
+ * MAIS RECENTE (pelo mês/ano), e não o último salvo. Assim, salvar um mês
+ * anterior para o comparativo não "rouba" o lugar do mês atual. Resumos
+ * parciais (só para comparativo) nunca são exibidos como principal.
+ * A coleção tem um documento por mês, então ler todos é barato.
+ */
+async function buscarUltimoResumo() {
+  const { ordemReferencia } = window.Calculations;
+  const snap = await getDocs(collection(db, COLECAO));
+  const resumos = snap.docs.map((d) => d.data()).filter((r) => !r.parcial);
+  if (resumos.length === 0) return null;
+  resumos.sort(
+    (a, b) =>
+      ordemReferencia(b.referencia) - ordemReferencia(a.referencia) ||
+      String(b.geradoEm || '').localeCompare(String(a.geradoEm || ''))
+  );
+  return resumos[0];
+}
+
+/** Busca o resumo de uma referência específica (completo ou parcial). */
 async function buscarResumoPorReferencia(referencia) {
   const ref = doc(db, COLECAO, referencia);
   const snap = await getDoc(ref);
   return snap.exists() ? snap.data() : null;
 }
 
-export { salvarResumo, buscarUltimoResumo, buscarResumoPorReferencia, salvarOrcado, buscarOrcado };
+export {
+  salvarResumo,
+  salvarResumoAnteriorParcial,
+  buscarUltimoResumo,
+  buscarResumoPorReferencia,
+  salvarOrcado,
+  buscarOrcado,
+};
