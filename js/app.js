@@ -315,6 +315,17 @@ function renderResumo(resumo) {
     document.getElementById('ind-tarifa-esgoto').textContent = formatarMoeda(ind.tarifaMediaEsgoto);
     document.getElementById('ind-ticket-agua').textContent = formatarMoeda(ind.ticketMedioAgua);
     document.getElementById('ind-ticket-esgoto').textContent = formatarMoeda(ind.ticketMedioEsgoto);
+
+    // conferência: Consumo Faturado = 0 não deveria ter valor de água/esgoto na Fatura
+    const avisoConsumoZero = document.getElementById('aviso-consumo-zero');
+    const qtd = ind.consumoZeroComValorMatriculas || 0;
+    avisoConsumoZero.hidden = qtd === 0;
+    if (qtd > 0) {
+      avisoConsumoZero.textContent =
+        `Atenção: ${qtd.toLocaleString('pt-BR')} matrícula(s) com Consumo Faturado = 0 têm valor de água/esgoto ` +
+        `na Fatura de Ciclo (total de ${formatarMoeda(ind.consumoZeroComValorTotal)}). Elas não entram nas ` +
+        'economias, mas esse valor continua no faturamento. Vale conferir.';
+    }
   } else {
     blocoIndicadores.hidden = true;
   }

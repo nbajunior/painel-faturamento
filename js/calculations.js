@@ -202,9 +202,14 @@ function totalEmAnaliseporCiclo(linhasFatura) {
 }
 
 /**
- * Indicadores de volume/ticket, cruzando Fatura (quem tem água/esgoto faturado e por quanto)
- * com Consumo (quantas economias e quantos m³ cada ligação tem). Mesma lógica do bloco
- * "Economias / Volume / Tarifa Média / Ticket Médio" do FAT. CICLOS (3).
+ * Indicadores de volume/ticket, no mesmo critério do FAT. CICLOS (3):
+ *  - Só conta como matrícula faturada quem tem Consumo Faturado > 0 no arquivo
+ *    de Consumo (o consumo medido não importa).
+ *  - ÁGUA: todas as matrículas do Consumo com Consumo Faturado > 0, com ou sem esgoto.
+ *  - ESGOTO: dessas, as que têm alguma linha "VALOR DE ESGOTO" na Fatura de Ciclo
+ *    (o Consumo não informa se a matrícula tem esgoto; é o mesmo CONT.SES da planilha).
+ * Volume médio, tarifa média e ticket médio usam essas contagens. O faturamento
+ * (numerador da tarifa e do ticket) continua vindo inteiro da Fatura de Ciclo.
  */
 function calcularIndicadoresConsumo(linhasFatura, linhasConsumo, fatura) {
   const consumoPorLigacao = {};
@@ -218,34 +223,48 @@ function calcularIndicadoresConsumo(linhasFatura, linhasConsumo, fatura) {
     };
   }
 
-  const ligacoesAgua = new Set();
-  const ligacoesEsgoto = new Set();
+  // quem fatura esgoto (pela Fatura) e quanto cada ligação faturou de água/esgoto (pra conferência abaixo)
+  const ligacoesComEsgoto = new Set();
+  const faturadoPorLigacao = {};
   for (const linha of linhasFatura) {
     const classe = classificarRubricaFatura(linha['Rubrica']);
-    if (classe === 'AGUA') ligacoesAgua.add(linha['N. da Ligacao']);
-    if (classe === 'ESGOTO') ligacoesEsgoto.add(linha['N. da Ligacao']);
+    if (classe !== 'AGUA' && classe !== 'ESGOTO') continue;
+    const id = linha['N. da Ligacao'];
+    if (classe === 'ESGOTO') ligacoesComEsgoto.add(id);
+    faturadoPorLigacao[id] = (faturadoPorLigacao[id] || 0) + parseNumeroBR(linha['Valor Parcela']);
   }
 
-  function somar(setLigacoes) {
-    let economias = 0;
-    let volume = 0;
-    for (const id of setLigacoes) {
-      const c = consumoPorLigacao[id];
-      if (!c) continue;
-      economias += c.numEconomias;
-      volume += c.consumoFaturado;
+  const agua = { economias: 0, volume: 0, matriculas: 0 };
+  const esgoto = { economias: 0, volume: 0, matriculas: 0 };
+  // conferência: matrículas com Consumo Faturado = 0 que mesmo assim têm valor de água/esgoto na Fatura
+  const consumoZeroComValor = { matriculas: 0, valor: 0 };
+
+  for (const [id, c] of Object.entries(consumoPorLigacao)) {
+    if (c.consumoFaturado > 0) {
+      agua.economias += c.numEconomias;
+      agua.volume += c.consumoFaturado;
+      agua.matriculas += 1;
+      if (ligacoesComEsgoto.has(id)) {
+        esgoto.economias += c.numEconomias;
+        esgoto.volume += c.consumoFaturado;
+        esgoto.matriculas += 1;
+      }
+    } else {
+      const valor = faturadoPorLigacao[id] || 0;
+      if (Math.abs(valor) >= 0.005) {
+        consumoZeroComValor.matriculas += 1;
+        consumoZeroComValor.valor += valor;
+      }
     }
-    return { economias, volume };
   }
-
-  const agua = somar(ligacoesAgua);
-  const esgoto = somar(ligacoesEsgoto);
 
   const divSeguro = (a, b) => (b > 0 ? a / b : 0);
 
   return {
     economiasAgua: agua.economias,
     economiasEsgoto: esgoto.economias,
+    matriculasAgua: agua.matriculas,
+    matriculasEsgoto: esgoto.matriculas,
     volumeAguaM3: agua.volume,
     volumeEsgotoM3: esgoto.volume,
     volumeMedioAgua: divSeguro(agua.volume, agua.economias),
@@ -254,6 +273,8 @@ function calcularIndicadoresConsumo(linhasFatura, linhasConsumo, fatura) {
     tarifaMediaEsgoto: divSeguro(fatura.faturamentoEsgoto, esgoto.volume),
     ticketMedioAgua: divSeguro(fatura.faturamentoAgua, agua.economias),
     ticketMedioEsgoto: divSeguro(fatura.faturamentoEsgoto, esgoto.economias),
+    consumoZeroComValorMatriculas: consumoZeroComValor.matriculas,
+    consumoZeroComValorTotal: consumoZeroComValor.valor,
   };
 }
 
