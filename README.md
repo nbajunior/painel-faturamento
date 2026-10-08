@@ -1,23 +1,22 @@
-# Painel de Faturamento — Fase 1
+# Painel de Faturamento
 
 Painel web para consolidar o faturamento (Água/Esgoto), Cancelamento e
 Indiretas (Serviço Avulso), a partir dos CSVs exportados diariamente.
 Roda inteiramente no navegador (nenhum servidor pra manter) e usa o
-Firebase só para guardar o resultado calculado e controlar login.
+Firebase só para guardar os totais calculados e controlar o acesso.
 
-**O que esta Fase 1 já faz:**
-- Login individual por e-mail/senha (só quem você cadastrar consegue entrar)
-- Upload da Fatura de Ciclo + Serviço Avulso do ciclo atual
-- Cálculo automático de: Faturamento Água, Faturamento Esgoto, Cancelamento,
-  Indiretas por categoria (Corte, Religação, LNA, LNE, Sanção, Outros)
-- Detalhamento por ciclo (Grupo) e localidade
-- Publicação: quem sobe os arquivos clica em "Publicar" e todo mundo que
-  abrir o link passa a ver esse resumo — sem precisar subir nada de novo
-
-**O que ainda não está aqui (próximas fases):**
-- Comparação mês a mês (Fase 2)
-- Consumo / migração de economias entre ciclos (Fase 2)
-- Orçado editável + DRE completo no layout do FAT. CICLOS (3) (Fase 3)
+**O que o painel faz hoje:**
+- Acesso restrito a uma lista de e-mails, com "Primeiro acesso" (a pessoa cria
+  a própria senha) e confirmação do e-mail por link
+- Upload da Fatura de Ciclo, Serviço Avulso e Consumo do ciclo atual
+- Cálculo de Faturamento Água/Esgoto, Cancelamento, Indiretas por categoria
+  (Corte, Religação, LNA, LNE, Sanção, Outros) e indicadores (economias,
+  volume, tarifa média, ticket médio)
+- DRE com Orçado RF/Sup editável e salvo por referência
+- Revisão de "Em Análise" com ajuste para o valor mínimo tarifário
+- Comparativo com o mês anterior
+- Publicação: quem sobe os arquivos clica em "Publicar" e toda a equipe
+  passa a ver esse resumo
 
 ---
 
@@ -53,19 +52,21 @@ Firebase só para guardar o resultado calculado e controlar login.
    - Clique em **Get started**.
    - Na aba **Sign-in method**, clique em **Email/Password**, ative a primeira
      opção e clique em **Save**.
-4. **Cadastrar as pessoas que podem acessar:**
-   - Ainda em Authentication, vá na aba **Users**.
-   - Clique em **Add user**, digite o e-mail e uma senha provisória para cada
-     pessoa da equipe. Repita para todos que devem ter acesso.
-   - Cada pessoa pode trocar a senha depois usando "Esqueci minha senha" na
-     tela de login do painel.
+4. **Quem pode acessar** é definido pela lista de e-mails no arquivo
+   `firestore.rules` (passo 6). Não é preciso criar usuários no Console: cada
+   pessoa da lista entra no painel, clica em **Primeiro acesso**, cria a senha
+   e confirma o e-mail pelo link que recebe. Só depois disso ela vê os dados.
 5. **Criar o banco de dados (Firestore):**
    - No menu lateral, vá em **Build > Firestore Database**.
    - Clique em **Create database**. Escolha a localização mais próxima
      (ex: `southamerica-east1` — São Paulo). Comece em **modo de produção**.
-6. **Configurar as regras de segurança:**
-   - Na aba **Rules** do Firestore, apague o conteúdo e cole o conteúdo do
-     arquivo `firestore.rules` deste projeto. Clique em **Publish**.
+6. **Configurar as regras de segurança e a lista de e-mails:**
+   - Abra o arquivo `firestore.rules` deste projeto e troque os e-mails de
+     exemplo pelos da equipe (minúsculas, entre aspas simples, separados por
+     vírgula, sem vírgula depois do último).
+   - Na aba **Rules** do Firestore, apague o conteúdo, cole o arquivo editado
+     e clique em **Publish**.
+   - Para incluir ou tirar alguém depois, repita este passo. Vale na hora.
 7. **Pegar as credenciais do projeto:**
    - Clique na engrenagem (⚙) ao lado de "Project Overview" > **Project settings**.
    - Role até **Your apps**, clique no ícone `</>` (Web) para criar um app web.
@@ -81,27 +82,40 @@ Firebase só para guardar o resultado calculado e controlar login.
 Pronto — em 1-2 minutos o site publicado no Pages já estará funcionando com
 login e banco de dados de verdade.
 
-### Parte C — Aviso importante sobre privacidade
+### Parte C — Privacidade e LGPD
 
 O link do GitHub Pages é **público**: qualquer pessoa com a URL consegue abrir
-a página de login. Isso não é um problema, porque **sem login não dá para ver
-nenhum dado** — as regras do Firestore (Parte B, passo 6) bloqueiam qualquer
-leitura de quem não estiver autenticado. Ainda assim:
+a página de login e ler o código. Isso não expõe dados: as regras do Firestore
+só liberam leitura e gravação para os e-mails da lista, e só depois que a
+pessoa confirmou o e-mail. Quem estiver fora da lista, mesmo com conta, vê a
+mensagem de acesso negado.
 
-- Não compartilhe o link fora da empresa sem necessidade.
-- Só cadastre e-mails de pessoas de confiança no Firebase Authentication.
-- Nunca suba os arquivos CSV originais (com nome/endereço de clientes) para
-  o repositório do GitHub — eles só devem passar pelo upload dentro do painel,
-  que processa tudo no navegador e só guarda os totais calculados.
+Os CSVs são lidos e calculados **no navegador** de quem faz o upload e não são
+enviados a lugar nenhum. No Firestore ficam só os totais (por ciclo,
+localidade e categoria), os nomes de rubricas não mapeadas e o e-mail de
+quem publicou. Nomes de clientes e números de ligação aparecem na tela de
+"Em Análise", mas não são salvos.
+
+- Só inclua na lista e-mails de pessoas de confiança.
+- Nunca suba os CSVs originais (com nome/endereço de clientes) para o
+  repositório do GitHub.
+- Valide o uso com o encarregado de dados (DPO) da empresa.
 
 ### Parte D — Uso do dia a dia
 
-1. Acesse o link do painel e faça login.
-2. Na seção **Atualizar dados**, preencha a referência (ex: `09-2026`), selecione
-   o CSV da Fatura de Ciclo e o do Serviço Avulso do dia, e clique em **Processar**.
-3. Confira os números calculados nos cards e tabelas acima.
-4. Se estiver tudo certo, clique em **Publicar para todos**. A partir daí,
-   qualquer pessoa que abrir o painel (mesmo sem fazer upload) verá esse resumo.
+1. Acesse o link do painel e faça login (no primeiro uso, "Primeiro acesso").
+2. Em **Atualizar dados**, preencha a referência (ex: `09-2026`), selecione os
+   três CSVs do dia e clique em **Processar**.
+3. Revise o "Em Análise", se for o caso, e confira os números.
+4. Clique em **Publicar para todos**.
+
+**Comparativo com o mês anterior:** o painel compara o mês exibido com o mês
+anterior salvo. Quando um mês já foi publicado no painel, ele vira
+automaticamente a base de comparação do mês seguinte, então só é preciso
+subir manualmente um mês que nunca foi publicado (pelo próprio bloco do
+comparativo, com os três arquivos do mês fechado). Importante: vale a
+**última publicação** de cada mês, então publique os arquivos finais do mês
+antes de começar o mês seguinte.
 
 ---
 
@@ -135,12 +149,14 @@ painel-faturamento/
 ├── css/styles.css          Estilos
 ├── js/
 │   ├── firebase-config.js  Suas credenciais do Firebase (editar)
-│   ├── auth.js             Login/logout
+│   ├── auth.js             Login, primeiro acesso e confirmação de e-mail
 │   ├── storage.js          Leitura/gravação no Firestore
 │   ├── parsers.js          Leitura dos CSVs
 │   ├── categorization.js   Regras de negócio (rubrica -> categoria)
-│   ├── calculations.js     Cálculo dos totais
+│   ├── calculations.js     Cálculo dos totais e do comparativo
+│   ├── tarifas.js          Tarifa progressiva (valor mínimo do Em Análise)
+│   ├── dre.js              Linhas do DRE
 │   └── app.js               Orquestração da interface
-├── firestore.rules         Regras de segurança (colar no Console do Firebase)
+├── firestore.rules         Regras de segurança + lista de e-mails (colar no Console)
 └── README.md
 ```

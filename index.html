@@ -12,7 +12,7 @@
   <section id="tela-login" class="tela-login">
     <div class="cartao-login">
       <h1>Painel de Faturamento</h1>
-      <p class="subtitulo">Acesso restrito. Use o e-mail cadastrado pela equipe.</p>
+      <p class="subtitulo" id="login-subtitulo">Acesso restrito. Use o seu e-mail da equipe.</p>
       <form id="form-login">
         <label for="input-email">E-mail</label>
         <input type="email" id="input-email" required autocomplete="username" />
@@ -20,8 +20,14 @@
         <label for="input-senha">Senha</label>
         <input type="password" id="input-senha" required autocomplete="current-password" />
 
+        <div id="grupo-confirmar-senha" hidden>
+          <label for="input-senha-confirmar">Repita a senha</label>
+          <input type="password" id="input-senha-confirmar" autocomplete="new-password" />
+        </div>
+
         <button type="submit" id="btn-entrar">Entrar</button>
         <button type="button" id="btn-esqueci" class="link-botao">Esqueci minha senha</button>
+        <button type="button" id="btn-primeiro-acesso" class="link-botao">Primeiro acesso? Crie sua senha</button>
       </form>
       <p id="login-erro" class="mensagem-erro" hidden></p>
     </div>
@@ -113,15 +119,18 @@
             <tbody></tbody>
           </table>
           <p id="nota-comparativo-parcial" class="texto-explicativo" hidden></p>
+          <button id="btn-reenviar-anterior" class="link-botao">Reenviar os arquivos do mês anterior</button>
         </div>
-        <div id="comparativo-nao-encontrado" hidden>
-          <p class="texto-explicativo">
-            Ainda não tenho o resumo do mês anterior (<strong id="ref-anterior-label"></strong>) salvo.
-            Suba só a Fatura de Ciclo dele uma vez — depois disso o painel lembra sozinho, sem precisar
-            reenviar todo mês. Confira se o arquivo é mesmo desse mês: o painel não tem como verificar.
-          </p>
-          <input type="file" id="input-fatura-anterior" accept=".csv" />
+        <div id="comparativo-upload" class="bloco-upload" hidden>
+          <p class="texto-explicativo" id="comparativo-upload-texto"></p>
+          <label for="input-anterior-fatura">Fatura de Ciclo (.csv)</label>
+          <input type="file" id="input-anterior-fatura" accept=".csv" />
+          <label for="input-anterior-servico">Serviço Avulso (.csv)</label>
+          <input type="file" id="input-anterior-servico" accept=".csv" />
+          <label for="input-anterior-consumo">Consumo (.csv)</label>
+          <input type="file" id="input-anterior-consumo" accept=".csv" />
           <button id="btn-processar-anterior" class="botao-secundario-cor">Processar e salvar mês anterior</button>
+          <button id="btn-cancelar-reenvio" class="link-botao" hidden>Cancelar</button>
           <p id="status-anterior" class="mensagem-status"></p>
         </div>
       </section>
@@ -219,7 +228,9 @@
     </main>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"
+    integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="js/categorization.js"></script>
   <script src="js/parsers.js"></script>
   <script src="js/tarifas.js"></script>
