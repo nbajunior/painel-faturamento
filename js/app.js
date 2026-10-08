@@ -5,10 +5,9 @@
  * + publicação de um novo resumo.
  */
 
-import { auth, fazerLogin, fazerLogout, recuperarSenha, observarLogin } from './auth.js';
+import { auth, fazerLogin, criarConta, enviarVerificacao, fazerLogout, recuperarSenha, observarLogin } from './auth.js';
 import {
   salvarResumo,
-  salvarResumoAnteriorParcial,
   buscarUltimoResumo,
   buscarResumoPorReferencia,
   salvarOrcado,
@@ -18,7 +17,6 @@ import {
 const { lerCSV } = window.Parsers;
 const {
   calcularResumo,
-  calcularResumoParcial,
   montarCandidatosEmAnalise,
   totalEmAnaliseporCiclo,
   aplicarOverridesFatura,
@@ -63,31 +61,103 @@ let overridesAtuais = {}; // { [N. da Ligacao]: novoValor } — ajustes de "Em A
 // ---------------------------------------------------------------------
 // Autenticação
 // ---------------------------------------------------------------------
+const loginSubtitulo = document.getElementById('login-subtitulo');
+const grupoConfirmarSenha = document.getElementById('grupo-confirmar-senha');
+const inputSenhaConfirmar = document.getElementById('input-senha-confirmar');
+const btnEntrar = document.getElementById('btn-entrar');
+const btnPrimeiroAcesso = document.getElementById('btn-primeiro-acesso');
+
+let modoPrimeiroAcesso = false;
+// enquanto um login/cadastro está no meio do caminho, o observador não deve agir sozinho
+let fluxoLoginEmAndamento = false;
+
+function mostrarMensagemLogin(texto) {
+  loginErro.textContent = texto;
+  loginErro.hidden = false;
+}
+
+function alternarModoPrimeiroAcesso(ativar) {
+  modoPrimeiroAcesso = ativar;
+  grupoConfirmarSenha.hidden = !ativar;
+  inputSenhaConfirmar.required = ativar;
+  inputSenha.autocomplete = ativar ? 'new-password' : 'current-password';
+  btnEntrar.textContent = ativar ? 'Criar minha senha' : 'Entrar';
+  btnEsqueci.hidden = ativar;
+  btnPrimeiroAcesso.textContent = ativar ? 'Já tenho senha — voltar para Entrar' : 'Primeiro acesso? Crie sua senha';
+  loginSubtitulo.textContent = ativar
+    ? 'Use o seu e-mail da equipe e escolha uma senha (mínimo 6 caracteres). Você vai receber um link para confirmar o e-mail.'
+    : 'Acesso restrito. Use o seu e-mail da equipe.';
+  loginErro.hidden = true;
+}
+
+btnPrimeiroAcesso.addEventListener('click', () => alternarModoPrimeiroAcesso(!modoPrimeiroAcesso));
+
 formLogin.addEventListener('submit', async (e) => {
   e.preventDefault();
   loginErro.hidden = true;
+  const email = inputEmail.value.trim();
+  const senha = inputSenha.value;
+
+  if (modoPrimeiroAcesso && senha !== inputSenhaConfirmar.value) {
+    mostrarMensagemLogin('As duas senhas não são iguais.');
+    return;
+  }
+
+  btnEntrar.disabled = true;
+  fluxoLoginEmAndamento = true;
   try {
-    await fazerLogin(inputEmail.value.trim(), inputSenha.value);
+    if (modoPrimeiroAcesso) {
+      await criarConta(email, senha);
+      await fazerLogout();
+      alternarModoPrimeiroAcesso(false);
+      inputSenha.value = '';
+      inputSenhaConfirmar.value = '';
+      mostrarMensagemLogin(
+        `Conta criada. Enviamos um link de confirmação para ${email} (confira também o spam). ` +
+          'Clique nele e depois entre aqui com a senha que você criou.'
+      );
+      return;
+    }
+
+    const cred = await fazerLogin(email, senha);
+    if (!cred.user.emailVerified) {
+      // conta existe, mas o e-mail nunca foi confirmado: reenviamos o link e não deixamos entrar
+      try {
+        await enviarVerificacao(cred.user);
+        mostrarMensagemLogin(
+          `Antes do primeiro uso, confirme seu e-mail: enviamos um link para ${email} (confira também o spam). ` +
+            'Depois de clicar nele, entre de novo.'
+        );
+      } catch (err) {
+        mostrarMensagemLogin(
+          err.code === 'auth/too-many-requests'
+            ? 'Seu e-mail ainda não foi confirmado e já enviamos vários links. Procure o último e-mail recebido (inclusive no spam) e tente de novo mais tarde.'
+            : 'Seu e-mail ainda não foi confirmado e não conseguimos enviar o link agora. Tente de novo em alguns minutos.'
+        );
+      }
+      await fazerLogout();
+      return;
+    }
+    await abrirApp(cred.user);
   } catch (err) {
-    loginErro.textContent = traduzErroAuth(err.code);
-    loginErro.hidden = false;
+    mostrarMensagemLogin(traduzErroAuth(err.code));
+  } finally {
+    fluxoLoginEmAndamento = false;
+    btnEntrar.disabled = false;
   }
 });
 
 btnEsqueci.addEventListener('click', async () => {
   const email = inputEmail.value.trim();
   if (!email) {
-    loginErro.textContent = 'Digite seu e-mail acima primeiro, depois clique em "Esqueci minha senha".';
-    loginErro.hidden = false;
+    mostrarMensagemLogin('Digite seu e-mail acima primeiro, depois clique em "Esqueci minha senha".');
     return;
   }
   try {
     await recuperarSenha(email);
-    loginErro.textContent = 'Enviamos um e-mail com instruções para redefinir sua senha.';
-    loginErro.hidden = false;
+    mostrarMensagemLogin('Se esse e-mail tiver acesso, enviamos instruções para redefinir a senha.');
   } catch (err) {
-    loginErro.textContent = traduzErroAuth(err.code);
-    loginErro.hidden = false;
+    mostrarMensagemLogin(traduzErroAuth(err.code));
   }
 });
 
@@ -96,21 +166,43 @@ btnSair.addEventListener('click', () => fazerLogout());
 function traduzErroAuth(codigo) {
   const mapa = {
     'auth/invalid-email': 'E-mail inválido.',
-    'auth/user-not-found': 'Usuário não encontrado. Fale com quem administra o painel.',
-    'auth/wrong-password': 'Senha incorreta.',
-    'auth/invalid-credential': 'E-mail ou senha incorretos.',
+    'auth/user-not-found': 'E-mail ou senha incorretos. Se for seu primeiro acesso, use "Primeiro acesso".',
+    'auth/wrong-password': 'E-mail ou senha incorretos.',
+    'auth/invalid-credential': 'E-mail ou senha incorretos. Se for seu primeiro acesso, use "Primeiro acesso".',
     'auth/too-many-requests': 'Muitas tentativas. Aguarde um pouco e tente de novo.',
+    'auth/email-already-in-use': 'Esse e-mail já tem senha criada. Volte para "Entrar" ou use "Esqueci minha senha".',
+    'auth/weak-password': 'A senha precisa ter pelo menos 6 caracteres.',
+    'auth/missing-password': 'Digite a senha.',
+    'auth/operation-not-allowed': 'A criação de contas está desativada no Firebase. Fale com quem administra o painel.',
   };
-  return mapa[codigo] || 'Não foi possível entrar. Tente novamente.';
+  return mapa[codigo] || 'Não foi possível concluir. Tente novamente.';
+}
+
+async function abrirApp(usuario) {
+  if (!telaApp.hidden) return; // já aberto
+  const temAcesso = await carregarUltimoResumo();
+  if (!temAcesso) return; // acessoNegado já cuidou da tela
+  telaLogin.hidden = true;
+  telaApp.hidden = false;
+  usuarioEmailSpan.textContent = usuario.email;
+}
+
+/** E-mail confirmado, mas fora da lista das regras do Firestore. */
+async function acessoNegado() {
+  await fazerLogout();
+  telaApp.hidden = true;
+  telaLogin.hidden = false;
+  mostrarMensagemLogin(
+    'Seu e-mail não está na lista de acesso deste painel. Peça para quem administra incluir você.'
+  );
 }
 
 observarLogin(async (usuario) => {
-  if (usuario) {
-    telaLogin.hidden = true;
-    telaApp.hidden = false;
-    usuarioEmailSpan.textContent = usuario.email;
-    await carregarUltimoResumo();
+  if (fluxoLoginEmAndamento) return; // o próprio formulário está cuidando disso
+  if (usuario && usuario.emailVerified) {
+    await abrirApp(usuario); // ex: reabriu a página já logado
   } else {
+    if (usuario) await fazerLogout(); // sessão de conta não confirmada: não fica logada
     telaLogin.hidden = false;
     telaApp.hidden = true;
   }
@@ -119,6 +211,7 @@ observarLogin(async (usuario) => {
 // ---------------------------------------------------------------------
 // Carregar e renderizar o resumo mais recente (visão de todo mundo)
 // ---------------------------------------------------------------------
+/** Retorna false se o usuário não tem permissão de leitura (fora da lista). */
 async function carregarUltimoResumo() {
   try {
     const resumo = await buscarUltimoResumo();
@@ -128,8 +221,14 @@ async function carregarUltimoResumo() {
       orcadoAtual = await buscarOrcado(resumo.referencia);
       renderDRE(resumo);
     }
+    return true;
   } catch (err) {
+    if (err.code === 'permission-denied') {
+      await acessoNegado();
+      return false;
+    }
     console.error('Erro ao buscar resumo salvo:', err);
+    return true;
   }
 }
 
@@ -413,16 +512,40 @@ btnAplicarAjustes.addEventListener('click', () => {
 // ---------------------------------------------------------------------
 const blocoComparativo = document.getElementById('bloco-comparativo');
 const divComparativoEncontrado = document.getElementById('comparativo-encontrado');
-const divComparativoNaoEncontrado = document.getElementById('comparativo-nao-encontrado');
+const divComparativoUpload = document.getElementById('comparativo-upload');
+const textoComparativoUpload = document.getElementById('comparativo-upload-texto');
 const notaComparativoParcial = document.getElementById('nota-comparativo-parcial');
-const inputFaturaAnterior = document.getElementById('input-fatura-anterior');
+const inputAnteriorFatura = document.getElementById('input-anterior-fatura');
+const inputAnteriorServico = document.getElementById('input-anterior-servico');
+const inputAnteriorConsumo = document.getElementById('input-anterior-consumo');
 const btnProcessarAnterior = document.getElementById('btn-processar-anterior');
+const btnReenviarAnterior = document.getElementById('btn-reenviar-anterior');
+const btnCancelarReenvio = document.getElementById('btn-cancelar-reenvio');
 const statusAnterior = document.getElementById('status-anterior');
 
 // evita buscar o mesmo mês anterior no Firestore a cada recálculo (ex: ao aplicar ajustes de Em Análise)
 let cacheAnterior = { referencia: null, resumo: null };
 // se dois carregamentos se cruzarem, só o mais recente pode desenhar na tela
 let tokenComparativo = 0;
+
+function mostrarUploadAnterior(refAnterior, reenvio) {
+  textoComparativoUpload.innerHTML = reenvio
+    ? `Suba de novo os três arquivos de <strong>${refAnterior}</strong>. Os dados salvos desse mês serão ` +
+      'substituídos para toda a equipe.'
+    : `Ainda não tenho os dados de <strong>${refAnterior}</strong>. Suba os três arquivos desse mês uma única vez ` +
+      '(Fatura de Ciclo, Serviço Avulso e Consumo, com o mês já fechado). Eles ficam salvos para toda a equipe, ' +
+      'e a partir do mês seguinte o comparativo usa automaticamente o mês publicado no painel. ' +
+      'Confira se os arquivos são mesmo desse mês: o painel não tem como verificar.';
+  btnCancelarReenvio.hidden = !reenvio;
+  statusAnterior.textContent = '';
+  divComparativoUpload.hidden = false;
+}
+
+function limparUploadAnterior() {
+  inputAnteriorFatura.value = '';
+  inputAnteriorServico.value = '';
+  inputAnteriorConsumo.value = '';
+}
 
 async function atualizarComparativo(resumo) {
   const token = ++tokenComparativo;
@@ -451,12 +574,12 @@ async function atualizarComparativo(resumo) {
   if (anterior) {
     renderTabelaComparativo(resumo, anterior);
     divComparativoEncontrado.hidden = false;
-    divComparativoNaoEncontrado.hidden = true;
+    // um mês salvo só com a Fatura (versão anterior do painel) pede o envio completo
+    if (anterior.parcial) mostrarUploadAnterior(refAnterior, true);
+    else divComparativoUpload.hidden = true;
   } else {
-    document.getElementById('ref-anterior-label').textContent = refAnterior;
-    statusAnterior.textContent = '';
     divComparativoEncontrado.hidden = true;
-    divComparativoNaoEncontrado.hidden = false;
+    mostrarUploadAnterior(refAnterior, false);
   }
 }
 
@@ -483,35 +606,72 @@ function renderTabelaComparativo(atual, anterior) {
   notaComparativoParcial.hidden = !anterior.parcial;
   if (anterior.parcial) {
     notaComparativoParcial.textContent =
-      `O mês ${anterior.referencia} foi salvo só com a Fatura de Ciclo, então Indiretas e Receita Total ` +
-      `não entram na comparação. Se esse mês for processado e publicado completo um dia, ele passa a valer aqui.`;
+      `${anterior.referencia} foi salvo só com a Fatura de Ciclo, então Indiretas e Receita Total ainda ` +
+      'não entram na comparação. Suba os três arquivos abaixo para completar.';
   }
 }
 
+btnReenviarAnterior.addEventListener('click', () => {
+  const refAnterior = referenciaAnterior(resumoExibido && resumoExibido.referencia);
+  if (refAnterior) mostrarUploadAnterior(refAnterior, true);
+});
+
+btnCancelarReenvio.addEventListener('click', () => {
+  limparUploadAnterior();
+  divComparativoUpload.hidden = true;
+});
+
 btnProcessarAnterior.addEventListener('click', async () => {
   const refAnterior = referenciaAnterior(resumoExibido && resumoExibido.referencia);
-  const arquivo = inputFaturaAnterior.files[0];
   if (!refAnterior) return;
-  if (!arquivo) {
-    statusAnterior.textContent = `Selecione o CSV da Fatura de Ciclo de ${refAnterior}.`;
+  const arquivoFatura = inputAnteriorFatura.files[0];
+  const arquivoServico = inputAnteriorServico.files[0];
+  const arquivoConsumo = inputAnteriorConsumo.files[0];
+  if (!arquivoFatura || !arquivoServico || !arquivoConsumo) {
+    statusAnterior.textContent = `Selecione os três arquivos de ${refAnterior} (Fatura de Ciclo, Serviço Avulso e Consumo).`;
     return;
   }
 
   btnProcessarAnterior.disabled = true;
   try {
-    const linhas = await lerCSV(arquivo, (n) => {
-      statusAnterior.textContent = `Lendo Fatura de Ciclo de ${refAnterior}... ${n.toLocaleString('pt-BR')} linhas`;
-    });
+    const ler = (arquivo, nome) =>
+      lerCSV(arquivo, (n) => {
+        statusAnterior.textContent = `Lendo ${nome} de ${refAnterior}... ${n.toLocaleString('pt-BR')} linhas`;
+      });
+    const linhasFatura = await ler(arquivoFatura, 'Fatura de Ciclo');
+    const linhasServico = await ler(arquivoServico, 'Serviço Avulso');
+    const linhasConsumo = await ler(arquivoConsumo, 'Consumo');
+
     statusAnterior.textContent = 'Calculando...';
-    const parcial = calcularResumoParcial(linhas, refAnterior);
-    if (parcial.fatura.faturamentoTotal === 0) {
-      throw new Error('nenhuma linha de Água/Esgoto encontrada. Confira se o arquivo é a Fatura de Ciclo.');
+    // mês fechado: sem revisão de Em Análise, os valores entram como vieram nos arquivos
+    const resumo = calcularResumo(linhasFatura, linhasServico, refAnterior, null, linhasConsumo);
+    if (resumo.fatura.faturamentoTotal === 0) {
+      throw new Error('nenhuma linha de Água/Esgoto encontrada. Confira se o primeiro arquivo é a Fatura de Ciclo.');
+    }
+
+    const existente = await buscarResumoPorReferencia(refAnterior);
+    const aviso =
+      existente && !existente.parcial
+        ? `\n\nATENÇÃO: ${refAnterior} já tem dados completos salvos (por ${existente.atualizadoPor || '—'}). ` +
+          'Eles serão substituídos.'
+        : '';
+    const confirmou = window.confirm(
+      `Salvar ${refAnterior} para toda a equipe?\n\n` +
+        `Faturamento Total: ${formatarMoeda(resumo.fatura.faturamentoTotal)}\n` +
+        `Cancelamento: ${formatarMoeda(resumo.fatura.cancelamento)}\n` +
+        `Indiretas: ${formatarMoeda(resumo.indiretas.totalIndiretas)}\n` +
+        `Receita Total: ${formatarMoeda(resumo.receitaTotal)}` +
+        aviso
+    );
+    if (!confirmou) {
+      statusAnterior.textContent = 'Nada foi salvo.';
+      return;
     }
 
     statusAnterior.textContent = 'Salvando...';
-    await salvarResumoAnteriorParcial(parcial, auth.currentUser.email);
-    cacheAnterior = { referencia: refAnterior, resumo: { ...parcial, atualizadoPor: auth.currentUser.email } };
-    inputFaturaAnterior.value = '';
+    await salvarResumo(resumo, auth.currentUser.email);
+    cacheAnterior = { referencia: refAnterior, resumo: { ...resumo, atualizadoPor: auth.currentUser.email } };
+    limparUploadAnterior();
     statusAnterior.textContent = '';
     await atualizarComparativo(resumoExibido);
   } catch (err) {

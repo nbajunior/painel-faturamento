@@ -37,19 +37,6 @@ async function salvarResumo(resumo, usuarioEmail) {
 }
 
 /**
- * Salva o resumo PARCIAL de um mês anterior (só Fatura de Ciclo), usado só no
- * comparativo. Nunca substitui um resumo completo que já exista para a referência.
- */
-async function salvarResumoAnteriorParcial(resumo, usuarioEmail) {
-  const ref = doc(db, COLECAO, resumo.referencia);
-  const snap = await getDoc(ref);
-  if (snap.exists() && !snap.data().parcial) {
-    throw new Error(`Já existe um resumo completo de ${resumo.referencia}; ele não foi substituído.`);
-  }
-  await setDoc(ref, { ...resumo, atualizadoPor: usuarioEmail });
-}
-
-/**
  * Busca o resumo que todo mundo deve ver ao abrir o painel: o da referência
  * MAIS RECENTE (pelo mês/ano), e não o último salvo. Assim, salvar um mês
  * anterior para o comparativo não "rouba" o lugar do mês atual. Resumos
@@ -78,7 +65,6 @@ async function buscarResumoPorReferencia(referencia) {
 
 export {
   salvarResumo,
-  salvarResumoAnteriorParcial,
   buscarUltimoResumo,
   buscarResumoPorReferencia,
   salvarOrcado,
